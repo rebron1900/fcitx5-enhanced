@@ -102,8 +102,10 @@ public class MainHook extends XposedModule {
         // hook setPreferenceScreen(PreferenceScreen) 是 public 方法，R8 动不了
         // PreferenceScreen 作为参数直接拿到，不依赖任何 internal 字段/方法
         try {
-            Class<?> pfc = Class.forName("androidx.preference.PreferenceFragmentCompat");
-            Class<?> psCls = Class.forName("androidx.preference.PreferenceScreen");
+            Class<?> pfc = Class.forName("androidx.preference.PreferenceFragmentCompat",
+                    true, param.getClassLoader());
+            Class<?> psCls = Class.forName("androidx.preference.PreferenceScreen",
+                    true, param.getClassLoader());
             Method setPs = pfc.getMethod("setPreferenceScreen", psCls);
             hook(setPs).intercept(chain -> {
                 Object fragment = chain.getThisObject();
@@ -116,8 +118,10 @@ public class MainHook extends XposedModule {
                 chain.proceed(); // 原始 setPreferenceScreen
 
                 if (screen == null) return null;
+                // 用 screen 的 classLoader（fcitx5 的类加载器）
+                ClassLoader targetLoader = screen.getClass().getClassLoader();
                 // 查重 + 添加
-                addPrefToScreen(screen, fragment);
+                addPrefToScreen(screen, fragment, targetLoader);
                 return null;
             });
         } catch (Throwable e) {
@@ -1345,7 +1349,7 @@ public class MainHook extends XposedModule {
         return svgToDrawable(CLIPBOARD_SVG, density, color, sizeDp);
     }
 
-    private void addPrefToScreen(Object screen, Object fragment) {
+    private void addPrefToScreen(Object screen, Object fragment, ClassLoader cl) {
         try {
             // 查重
             Method getCnt = screen.getClass().getMethod("getPreferenceCount");
@@ -1363,7 +1367,7 @@ public class MainHook extends XposedModule {
                 if (p.getClass().getName().contains("PreferenceCategory")) cat = p;
             }
             Context ctx = (Context) fragment.getClass().getMethod("getContext").invoke(fragment);
-            Object pref = Class.forName("androidx.preference.Preference")
+            Object pref = Class.forName("androidx.preference.Preference", false, cl)
                     .getConstructor(Context.class).newInstance(ctx);
             pref.getClass().getMethod("setTitle", CharSequence.class)
                     .invoke(pref, "小企鹅增强");
@@ -1373,8 +1377,8 @@ public class MainHook extends XposedModule {
                     .invoke(pref, "fcitx5_enhanced_entry");
 
             java.lang.reflect.Proxy onClk = (java.lang.reflect.Proxy) java.lang.reflect.Proxy.newProxyInstance(
-                    pref.getClass().getClassLoader(),
-                    new Class[]{Class.forName("androidx.preference.Preference$OnPreferenceClickListener")},
+                    cl,
+                    new Class[]{Class.forName("androidx.preference.Preference$OnPreferenceClickListener", false, cl)},
                     (proxy, method, args) -> {
                         Intent intent = new Intent(ctx, SettingsActivity.class);
                         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -1382,10 +1386,10 @@ public class MainHook extends XposedModule {
                         return true;
                     });
             pref.getClass().getMethod("setOnPreferenceClickListener",
-                    Class.forName("androidx.preference.Preference$OnPreferenceClickListener"))
+                    Class.forName("androidx.preference.Preference$OnPreferenceClickListener", false, cl))
                     .invoke(pref, onClk);
             cat.getClass().getMethod("addPreference",
-                    Class.forName("androidx.preference.Preference"))
+                    Class.forName("androidx.preference.Preference", false, cl))
                     .invoke(cat, pref);
             log(Log.INFO, TAG, "✅ settings entry added to Android category");
         } catch (Throwable e) {
