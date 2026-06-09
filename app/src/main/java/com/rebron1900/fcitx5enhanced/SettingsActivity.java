@@ -16,14 +16,9 @@ import android.widget.TextView;
 
 import org.json.JSONObject;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
 import java.io.FileWriter;
 
 public class SettingsActivity extends Activity {
-
-    private static final String CONFIG_PATH = "/data/local/tmp/fcitx5_enhanced_config.json";
 
     private SeekBar sbBlur, sbAlpha, sbCorner;
     private TextView tvBlur, tvAlpha, tvCorner;
@@ -166,28 +161,7 @@ public class SettingsActivity extends Activity {
                 } finally { c.close(); }
             }
         } catch (Exception ignored) {}
-
-        restoreFromFile();
         updateLabels();
-    }
-
-    private void restoreFromFile() {
-        try {
-            File f = new File(CONFIG_PATH);
-            if (!f.exists()) return;
-            BufferedReader br = new BufferedReader(new FileReader(f));
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = br.readLine()) != null) sb.append(line);
-            br.close();
-            JSONObject json = new JSONObject(sb.toString());
-            sbBlur.setProgress(json.optInt("blur_radius", 100));
-            sbAlpha.setProgress(json.optInt("bg_alpha", 60));
-            sbCorner.setProgress(json.optInt("corner_radius", 20));
-            swVoice.setChecked(json.optBoolean("voice_enabled", true));
-            swLeft.setChecked(json.optBoolean("show_left_button", true));
-            swRight.setChecked(json.optBoolean("show_right_button", true));
-        } catch (Exception ignored) {}
     }
 
     private void updateLabels() {
@@ -204,26 +178,47 @@ public class SettingsActivity extends Activity {
         cv.put("voice_enabled", swVoice.isChecked());
         cv.put("show_left_button", swLeft.isChecked());
         cv.put("show_right_button", swRight.isChecked());
+
+        android.util.Log.i("Fcitx5Enh", "Settings saving: L=" + swLeft.isChecked() + " R=" + swRight.isChecked() + " V=" + swVoice.isChecked());
+
+        // 直接写文件（模块私有目录，不依赖 SharedPreferences / ContentProvider）
+        saveToFile();
+
+        // 同时通过 CP 写（同进程，文件共享）
         try {
             getContentResolver().update(ConfigContentProvider.CONTENT_URI, cv, null, null);
-        } catch (Exception ignored) {}
-        saveToFile();
+        } catch (Exception e) {
+            android.util.Log.e("Fcitx5Enh", "Settings CP update failed: " + e);
+        }
+
         android.content.Intent intent = new android.content.Intent("com.rebron1900.fcitx5enhanced.UI_UPDATE");
+        // 广播携带配置值，供 MainHook 直接验真（不依赖 CP/文件）
+        intent.putExtra("show_left_button", swLeft.isChecked());
+        intent.putExtra("show_right_button", swRight.isChecked());
+        intent.putExtra("voice_enabled", swVoice.isChecked());
+        intent.putExtra("blur_radius", sbBlur.getProgress());
+        intent.putExtra("bg_alpha", sbAlpha.getProgress());
+        intent.putExtra("corner_radius", sbCorner.getProgress());
         try { sendBroadcast(intent); } catch (Exception ignored) {}
     }
 
     private void saveToFile() {
         try {
-            JSONObject json = new JSONObject();
+            org.json.JSONObject json = new org.json.JSONObject();
             json.put("blur_radius", sbBlur.getProgress());
             json.put("bg_alpha", sbAlpha.getProgress());
             json.put("corner_radius", sbCorner.getProgress());
             json.put("voice_enabled", swVoice.isChecked());
             json.put("show_left_button", swLeft.isChecked());
             json.put("show_right_button", swRight.isChecked());
-            FileWriter fw = new FileWriter(CONFIG_PATH);
+            java.io.File f = new java.io.File(getFilesDir(), "enhanced_config.json");
+            java.io.FileWriter fw = new java.io.FileWriter(f);
             fw.write(json.toString(2));
             fw.close();
-        } catch (Exception ignored) {}
+            android.util.Log.i("Fcitx5Enh", "Settings direct file write OK: L=" + swLeft.isChecked());
+        } catch (Exception e) {
+            android.util.Log.e("Fcitx5Enh", "Settings direct file write failed: " + e);
+        }
     }
+
 }

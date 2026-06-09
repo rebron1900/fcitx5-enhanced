@@ -60,6 +60,9 @@ public class VoiceInputClient {
     // ── 状态 ──
     private volatile boolean mHolding;
     private volatile boolean mConsumed;  // Atomic 语义：一旦标记就不再提交文字
+    private volatile boolean mFinalized; // 收到最终结果（可能有 AI 润色版跟随）
+    private String mRawText;             // 第1次 onFinal 的原始识别文本
+    private Runnable mCommitTimer;       // 延时 commit 兜底
     private InputMethodService mService;
     private IBinder mRemote;
     private ServiceConnection mConnection;
@@ -72,7 +75,7 @@ public class VoiceInputClient {
 
     private final Handler mMainHandler = new Handler(Looper.getMainLooper());
     private WeakReference<InputConnection> mInputConnectionRef;
-    private WeakReference<Runnable> mOnDoneRef;
+    private Runnable mOnDone;              // 强引用（原 WeakReference 易被 GC 导致波形无法复位）
     private AmplitudeListener mAmpListener;
 
     /** 设置振幅回调（UI 更新） */
@@ -88,7 +91,7 @@ public class VoiceInputClient {
         mHolding = true;
         mConsumed = false;
         mInputConnectionRef = new WeakReference<>(ic);
-        mOnDoneRef = new WeakReference<>(onDone);
+        mOnDone = onDone;
 
         final ServiceConnection conn = new ServiceConnection() {
             @Override
@@ -133,20 +136,54 @@ public class VoiceInputClient {
                                         String text = data.readString();
                                         if (text == null) text = "";
                                         final String t = text;
-                                        // 在 Binder 线程立即标记 mConsumed，防第二个回调（AI 修正版）竞争
+
                                         if (mConsumed) return true;
-                                        mConsumed = true;
-                                        mMainHandler.post(() -> {
-                                            InputConnection icL = mInputConnectionRef != null
-                                                    ? mInputConnectionRef.get() : null;
-                                            if (icL != null) {
-                                                icL.finishComposingText();
-                                                icL.commitText(t, 1);
+
+                                        if (!mFinalized) {
+                                            // === 第1次 onFinal：原始识别文本 ===
+                                            mFinalized = true;
+                                            mRawText = t;
+                                            // 设 composing 但不 commit，等待 AI 润色版
+                                            mMainHandler.post(() -> {
+                                                if (mConsumed) return;
+                                                InputConnection icL = mInputConnectionRef != null
+                                                        ? mInputConnectionRef.get() : null;
+                                                if (icL != null) icL.setComposingText(t, 1);
+                                            });
+                                            // 延时 commit 兜底：800ms 内没收到润色版就提交原始结果
+                                            mCommitTimer = () -> {
+                                                if (mConsumed) return;
+                                                mConsumed = true;
+                                                mCommitTimer = null;
+                                                InputConnection icL = mInputConnectionRef != null
+                                                        ? mInputConnectionRef.get() : null;
+                                                if (icL != null) {
+                                                    icL.commitText(mRawText != null ? mRawText : t, 1);
+                                                }
+                                                Runnable done = mOnDone;
+                                                if (done != null) done.run();
+                                                doUnbind();
+                                            };
+                                            mMainHandler.postDelayed(mCommitTimer, 800);
+                                        } else {
+                                            // === 第2次 onFinal：AI 润色版 ===
+                                            // 取消兜底定时器，直接用润色文本替换 composing 并 commit
+                                            if (mCommitTimer != null) {
+                                                mMainHandler.removeCallbacks(mCommitTimer);
+                                                mCommitTimer = null;
                                             }
-                                            Runnable done = mOnDoneRef != null ? mOnDoneRef.get() : null;
-                                            if (done != null) done.run();
-                                        });
-                                        doUnbind();
+                                            mConsumed = true;
+                                            mMainHandler.post(() -> {
+                                                InputConnection icL = mInputConnectionRef != null
+                                                        ? mInputConnectionRef.get() : null;
+                                                if (icL != null) {
+                                                    icL.commitText(t, 1);
+                                                }
+                                                Runnable done = mOnDone;
+                                                if (done != null) done.run();
+                                            });
+                                            doUnbind();
+                                        }
                                         if (reply != null) reply.writeNoException();
                                         return true;
                                     }
@@ -160,7 +197,7 @@ public class VoiceInputClient {
                                         if (mConsumed) return true;
                                         mConsumed = true;
                                         mMainHandler.post(() -> {
-                                            Runnable done = mOnDoneRef != null ? mOnDoneRef.get() : null;
+                                            Runnable done = mOnDone;
                                             if (done != null) done.run();
                                         });
                                         doUnbind();
@@ -469,7 +506,7 @@ public class VoiceInputClient {
         mMainHandler.post(() -> {
             if (mConsumed) return;
             mConsumed = true;
-            Runnable done = mOnDoneRef != null ? mOnDoneRef.get() : null;
+            Runnable done = mOnDone;
             if (done != null) done.run();
         });
     }

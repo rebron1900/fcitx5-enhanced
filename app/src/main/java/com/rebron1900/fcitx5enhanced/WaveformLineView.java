@@ -12,14 +12,12 @@ import android.view.View;
 
 /**
  * 波形线 View。
- * 空闲时：一条水平细线
- * 录音时：根据振幅上下波动，正弦波形
- * 无音频输入时也有基础呼吸脉动
- * 触摸：按下开始录音，松开结束
+ * 空闲时：一条水平渐隐线
+ * 录音时：实时 RMS 振幅波形
  */
 public class WaveformLineView extends View {
 
-    private Paint mPaint;
+    private Paint mLinePaint;
     private Path mPath;
     private float mAmplitude = 0f;
     private float mTarget = 0f;
@@ -34,10 +32,10 @@ public class WaveformLineView extends View {
     public WaveformLineView(Context context) {
         super(context);
         mDensity = getResources().getDisplayMetrics().density;
-        mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        mPaint.setStyle(Paint.Style.STROKE);
-        mPaint.setStrokeCap(Paint.Cap.ROUND);
-        mPaint.setStrokeJoin(Paint.Join.ROUND);
+        mLinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        mLinePaint.setStyle(Paint.Style.STROKE);
+        mLinePaint.setStrokeCap(Paint.Cap.ROUND);
+        mLinePaint.setStrokeJoin(Paint.Join.ROUND);
         mPath = new Path();
         mIdleColor = 0x88CCCCCC;
         mRecColor = 0xFF4F6BF6;
@@ -50,7 +48,9 @@ public class WaveformLineView extends View {
     public void setRecording(boolean r) {
         mRecording = r;
         mCurColor = r ? mRecColor : mIdleColor;
-        if (!r) mTarget = 0f;
+        if (!r) {
+            mTarget = 0f;
+        }
         invalidate();
     }
 
@@ -58,6 +58,11 @@ public class WaveformLineView extends View {
         if (a < 0) a = 0;
         if (a > 1) a = 1;
         mTarget = a;
+        if (a > 0.02f && !mRecording) {
+            // 有音频输入但不在录音状态（闲时呼吸）
+            invalidate();
+            return;
+        }
         invalidate();
     }
 
@@ -78,38 +83,41 @@ public class WaveformLineView extends View {
         float cy = h / 2f;
         float strokeW = Math.max(1.5f, 2 * mDensity);
 
-        mPaint.setStrokeWidth(strokeW);
+        mLinePaint.setStrokeWidth(strokeW);
 
-        // 渐变遮罩：中间实色 → 两端渐隐到透明
         int r = Color.red(mCurColor), g = Color.green(mCurColor), b = Color.blue(mCurColor);
         int a = Color.alpha(mCurColor);
+
+        // ── 波形线条 ──
+
+        // 渐变遮罩：中间实色 → 两端渐隐到透明
         int edgeColor = Color.argb(0, r, g, b);
         int centerColor = Color.argb(a, r, g, b);
-        mPaint.setShader(new LinearGradient(
+        LinearGradient lineGrad = new LinearGradient(
                 pad, 0, w - pad, 0,
                 new int[]{edgeColor, centerColor, centerColor, edgeColor},
                 new float[]{0f, 0.2f, 0.8f, 1f},
                 Shader.TileMode.CLAMP
-        ));
+        );
 
         if (!mRecording) {
             // 空闲：水平线
-            c.drawLine(pad, cy, w - pad, cy, mPaint);
+            mLinePaint.setShader(lineGrad);
+            mLinePaint.setStrokeWidth(strokeW);
+            c.drawLine(pad, cy, w - pad, cy, mLinePaint);
             return;
         }
 
         // 有效振幅：取 max(振幅, 0.05) 确保最低可见波动（呼吸感）
         float amp = Math.max(mAmplitude, 0.05f);
-        float maxH = h * 0.48f;                // 波形最大幅度（原 0.38，放大到近半高）
+        float maxH = h * 0.48f;
 
-        // 用 lineTo 画简单正弦波（稳定可靠）
+        // 用 lineTo 画简单正弦波
         mPath.reset();
         float segW = lineW / SEGS;
-        boolean first = true;
 
         for (int i = 0; i <= SEGS; i++) {
             float t = (float) i / SEGS;
-            // 三个频率叠加，产生丰富波浪感
             float wave = (float) (
                 Math.sin(t * Math.PI * 6 + mPhase) * 0.5 +
                 Math.sin(t * Math.PI * 14 + mPhase * 1.3) * 0.3 +
@@ -119,12 +127,14 @@ public class WaveformLineView extends View {
             float x = pad + i * segW;
             float y = cy - wave * maxH;
 
-            if (first) { mPath.moveTo(x, y); first = false; }
-            else       { mPath.lineTo(x, y); }
+            if (i == 0) mPath.moveTo(x, y);
+            else        mPath.lineTo(x, y);
         }
 
-        // 画主波形线
-        c.drawPath(mPath, mPaint);
+        // ── 波形线条 ──
+        mLinePaint.setShader(lineGrad);
+        mLinePaint.setStrokeWidth(strokeW);
+        c.drawPath(mPath, mLinePaint);
 
         // 持续刷新动画
         postInvalidateOnAnimation();

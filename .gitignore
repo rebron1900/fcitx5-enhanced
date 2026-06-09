@@ -10,3 +10,4 @@ release.keystore
 *.apk.idsig
 *.idsig
 *.log
+core/

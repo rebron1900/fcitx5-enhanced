@@ -2,22 +2,28 @@ package com.rebron1900.fcitx5enhanced;
 
 import android.content.ContentProvider;
 import android.content.ContentValues;
-import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.database.MatrixCursor;
 import android.net.Uri;
+
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
 
 /**
  * Fcitx5 增强 — 配置 ContentProvider
  *
  * 跨进程设置读写（hook 进程 ← IPC → 设置页进程）。
+ * 存储：模块私有目录下的 enhanced_config.json（不依赖 SharedPreferences）。
  */
 public class ConfigContentProvider extends ContentProvider {
 
     public static final Uri CONTENT_URI =
             Uri.parse("content://com.rebron1900.fcitx5enhanced.config/config");
 
-    private static final String SP_NAME = "fcitx5_enhanced_config";
     private static final String[] COLUMNS = {
         "blur_radius", "bg_alpha", "corner_radius",
         "voice_enabled", "show_left_button", "show_right_button"
@@ -26,63 +32,77 @@ public class ConfigContentProvider extends ContentProvider {
     @Override
     public boolean onCreate() { return true; }
 
+    private File getConfigFile() {
+        return new File(getContext().getFilesDir(), "enhanced_config.json");
+    }
+
+    private JSONObject readJson() {
+        JSONObject json = new JSONObject();
+        try {
+            File f = getConfigFile();
+            if (f.exists()) {
+                BufferedReader br = new BufferedReader(new FileReader(f));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = br.readLine()) != null) sb.append(line);
+                br.close();
+                json = new JSONObject(sb.toString());
+            }
+        } catch (Exception ignored) {}
+        return json;
+    }
+
     @Override
     public Cursor query(Uri uri, String[] projection, String selection,
                         String[] selectionArgs, String sortOrder) {
-        SharedPreferences sp = getContext()
-                .getSharedPreferences(SP_NAME, android.content.Context.MODE_PRIVATE);
+        JSONObject json = readJson();
+        int blur = json.optInt("blur_radius", 100);
+        int alpha = json.optInt("bg_alpha", 60);
+        int corner = json.optInt("corner_radius", 20);
+        boolean V = json.optBoolean("voice_enabled", true);
+        boolean L = json.optBoolean("show_left_button", true);
+        boolean R = json.optBoolean("show_right_button", true);
+        android.util.Log.i("Fcitx5Enh", "CP query from file: L=" + L + " R=" + R + " V=" + V);
         MatrixCursor c = new MatrixCursor(COLUMNS);
-        c.addRow(new Object[]{
-                sp.getInt("blur_radius", 100),
-                sp.getInt("bg_alpha", 60),
-                sp.getInt("corner_radius", 20),
-                sp.getBoolean("voice_enabled", true),
-                sp.getBoolean("show_left_button", true),
-                sp.getBoolean("show_right_button", true)
-        });
+        c.addRow(new Object[]{blur, alpha, corner, V, L, R});
         return c;
     }
 
     @Override
     public int update(Uri uri, ContentValues values, String selection,
                       String[] selectionArgs) {
-        SharedPreferences.Editor editor = getContext()
-                .getSharedPreferences(SP_NAME, android.content.Context.MODE_PRIVATE).edit();
-        if (values.containsKey("blur_radius"))
-            editor.putInt("blur_radius", values.getAsInteger("blur_radius"));
-        if (values.containsKey("bg_alpha"))
-            editor.putInt("bg_alpha", values.getAsInteger("bg_alpha"));
-        if (values.containsKey("corner_radius"))
-            editor.putInt("corner_radius", values.getAsInteger("corner_radius"));
-        if (values.containsKey("voice_enabled"))
-            editor.putBoolean("voice_enabled", values.getAsBoolean("voice_enabled"));
-        if (values.containsKey("show_left_button"))
-            editor.putBoolean("show_left_button", values.getAsBoolean("show_left_button"));
-        if (values.containsKey("show_right_button"))
-            editor.putBoolean("show_right_button", values.getAsBoolean("show_right_button"));
-        editor.apply();
-        saveToFile();
-        return 1;
-    }
-
-    /** 持久化到 JSON 文件，供目标进程 fallback 读取 */
-    private void saveToFile() {
+        android.util.Log.i("Fcitx5Enh", "CP update called keys=" + values.keySet());
+        JSONObject json = readJson();
         try {
-            SharedPreferences sp = getContext()
-                    .getSharedPreferences(SP_NAME, android.content.Context.MODE_PRIVATE);
-            org.json.JSONObject json = new org.json.JSONObject();
-            json.put("blur_radius", sp.getInt("blur_radius", 100));
-            json.put("bg_alpha", sp.getInt("bg_alpha", 60));
-            json.put("corner_radius", sp.getInt("corner_radius", 20));
-            json.put("toolbar_radius", sp.getInt("corner_radius", 20));
-            json.put("voice_enabled", sp.getBoolean("voice_enabled", true));
-            json.put("show_left_button", sp.getBoolean("show_left_button", true));
-            json.put("show_right_button", sp.getBoolean("show_right_button", true));
-            java.io.FileOutputStream fos = new java.io.FileOutputStream(
-                    "/data/local/tmp/fcitx5_enhanced_config.json");
-            fos.write(json.toString(2).getBytes("UTF-8"));
-            fos.close();
-        } catch (Exception ignored) {}
+            if (values.containsKey("blur_radius"))
+                json.put("blur_radius", values.getAsInteger("blur_radius"));
+            if (values.containsKey("bg_alpha"))
+                json.put("bg_alpha", values.getAsInteger("bg_alpha"));
+            if (values.containsKey("corner_radius"))
+                json.put("corner_radius", values.getAsInteger("corner_radius"));
+            if (values.containsKey("voice_enabled")) {
+                boolean v = values.getAsBoolean("voice_enabled");
+                android.util.Log.i("Fcitx5Enh", "CP update: voice_enabled=" + v);
+                json.put("voice_enabled", v);
+            }
+            if (values.containsKey("show_left_button")) {
+                boolean L = values.getAsBoolean("show_left_button");
+                android.util.Log.i("Fcitx5Enh", "CP update: show_left_button=" + L);
+                json.put("show_left_button", L);
+            }
+            if (values.containsKey("show_right_button")) {
+                boolean R = values.getAsBoolean("show_right_button");
+                android.util.Log.i("Fcitx5Enh", "CP update: show_right_button=" + R);
+                json.put("show_right_button", R);
+            }
+            FileWriter fw = new FileWriter(getConfigFile());
+            fw.write(json.toString(2));
+            fw.close();
+            android.util.Log.i("Fcitx5Enh", "CP update: file written OK");
+        } catch (Exception e) {
+            android.util.Log.e("Fcitx5Enh", "CP update file error: " + e);
+        }
+        return 1;
     }
 
     @Override public String getType(Uri uri) { return "vnd.android.cursor.dir/vnd.fcitx5enhanced.config"; }

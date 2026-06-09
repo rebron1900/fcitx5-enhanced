@@ -50,7 +50,7 @@
 1. 下载最新 [Release APK](https://github.com/rebron1900/fcitx5-enhanced/releases)
 2. 在 LSPosed 中激活模块，作用域勾选 `org.fcitx.fcitx5.android.fx`
 3. 重启 fcitx5 进程（或重启设备）
-4. 进入 fcitx5 设置 → **小企鹅增强**（Android 分类下），调节参数
+4. 在桌面应用列表中找到 **Fcitx5 增强配置**，调节参数
 
 ## 从源码编译
 

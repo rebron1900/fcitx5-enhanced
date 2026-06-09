@@ -70,6 +70,8 @@ public class MainHook extends XposedModule {
 
     /** Tracks whether we've registered the re-apply broadcast receiver */
     private boolean receiverRegistered;
+    /** Tracks whether extra buttons have been created in the current view */
+    private boolean buttonsInitialized;
 
     @Override
     public void onPackageReady(PackageReadyParam param) {
@@ -107,58 +109,22 @@ public class MainHook extends XposedModule {
     // ══════════════════════════════════════════
 
     private void readConfig(View anyView) {
-        boolean loaded = false;
         try {
-            Uri uri = Uri.parse("content://com.rebron1900.fcitx5enhanced.config/config");
-            Cursor c = anyView.getContext().getContentResolver().query(
-                    uri, null, null, null, null);
-            if (c != null) {
-                try {
-                    if (c.moveToFirst()) {
-                        cfgBlur = c.getInt(c.getColumnIndexOrThrow("blur_radius"));
-                        cfgAlpha = c.getInt(c.getColumnIndexOrThrow("bg_alpha"));
-                        cfgCorner = c.getInt(c.getColumnIndexOrThrow("corner_radius"));
-                        cfgToolbar = cfgCorner;
-                        cfgVoice = c.getInt(c.getColumnIndexOrThrow("voice_enabled")) != 0;
-                        cfgLeftBtn = c.getInt(c.getColumnIndexOrThrow("show_left_button")) != 0;
-                        cfgRightBtn = c.getInt(c.getColumnIndexOrThrow("show_right_button")) != 0;
-                        loaded = true;
-                    }
-                } finally { c.close(); }
-            }
+            android.content.SharedPreferences sp = anyView.getContext()
+                    .getSharedPreferences("fcitx5_enhanced_config", android.content.Context.MODE_PRIVATE);
+            cfgBlur = sp.getInt("blur_radius", 100);
+            cfgAlpha = sp.getInt("bg_alpha", 60);
+            cfgCorner = sp.getInt("corner_radius", 20);
+            cfgToolbar = cfgCorner;
+            cfgVoice = sp.getBoolean("voice_enabled", true);
+            cfgLeftBtn = sp.getBoolean("show_left_button", true);
+            cfgRightBtn = sp.getBoolean("show_right_button", true);
+            log(Log.INFO, TAG, "read from fcitx5 SP: L=" + cfgLeftBtn + " R=" + cfgRightBtn + " V=" + cfgVoice);
         } catch (Throwable t) {
-            log(Log.WARN, TAG, "readConfig CP failed: " + t);
+            log(Log.WARN, TAG, "readConfig SP failed: " + t);
+            cfgBlur = 100; cfgAlpha = 60; cfgCorner = 20; cfgToolbar = 20;
+            cfgVoice = true; cfgLeftBtn = true; cfgRightBtn = true;
         }
-        // Fallback: 持久文件（模块重装后恢复）
-        if (!loaded || (cfgBlur == 0 && cfgAlpha == 0)) {
-            restoreFromFile();
-        }
-    }
-
-    /** 从 /data/local/tmp/ 持久文件恢复配置 */
-    private void restoreFromFile() {
-        try {
-            java.io.File f = new java.io.File("/data/local/tmp/fcitx5_enhanced_config.json");
-            if (!f.exists()) {
-                f = new java.io.File("/data/local/tmp/fcitx5_frosted_config.json"); // 兼容旧路径
-                if (!f.exists()) return;
-            }
-            java.io.BufferedReader br = new java.io.BufferedReader(
-                    new java.io.FileReader(f));
-            StringBuilder sb = new StringBuilder();
-            String line;
-            while ((line = br.readLine()) != null) sb.append(line);
-            br.close();
-            org.json.JSONObject json = new org.json.JSONObject(sb.toString());
-            cfgBlur = json.optInt("blur_radius", 100);
-            cfgAlpha = json.optInt("bg_alpha", 60);
-            cfgCorner = json.optInt("corner_radius", 20);
-            cfgToolbar = json.optInt("toolbar_radius", 20);
-            cfgVoice = json.optBoolean("voice_enabled", true);
-            cfgLeftBtn = json.optBoolean("show_left_button", true);
-            cfgRightBtn = json.optBoolean("show_right_button", true);
-            log(Log.INFO, TAG, "restored from file: blur=" + cfgBlur + " alpha=" + cfgAlpha);
-        } catch (Exception ignored) {}
     }
 
     // ══════════════════════════════════════════
@@ -168,11 +134,13 @@ public class MainHook extends XposedModule {
     private void applyAllEffects(View inputView) {
         // Re-read config each time (ContentProvider gives latest values)
         readConfig(inputView);
+        log(Log.INFO, TAG, "applyAllEffects start");
         applyFrostedGlass(inputView);
         applyRoundedCorners(inputView);
         roundToolbarTop(inputView);
         addExtraButtons(inputView);
         applyKeyEffects(inputView);
+        log(Log.INFO, TAG, "applyAllEffects done");
     }
 
     // ══════════════════════════════════════════
@@ -588,37 +556,59 @@ public class MainHook extends XposedModule {
     // ══════════════════════════════════════════
     //  底部角按钮 — IME切换 + 剪贴板
     // ══════════════════════════════════════════
-
     private void addExtraButtons(View inputView) {
         try {
             Method getKv = inputView.getClass().getMethod("getKeyboardView");
             final ViewGroup keyboardView = (ViewGroup) getKv.invoke(inputView);
-            if (keyboardView.findViewWithTag("frosted_btn_ime") != null) return;
 
+            if (buttonsInitialized) {
+                // 后续调用：仅切换可见性（实现即时生效）
+                // 但如果键盘重建了（如切换主题），按钮不存在，需要重置并重新创建
+                View ime = keyboardView.findViewWithTag("frosted_btn_ime");
+                View clip = keyboardView.findViewWithTag("frosted_btn_clipboard");
+                View wave = keyboardView.findViewWithTag("frosted_btn_voice");
+                if (ime == null && clip == null && wave == null) {
+                    // 键盘重建了，退出去走首次创建路径
+                    buttonsInitialized = false;
+                } else {
+                    if (ime != null) ime.setVisibility(cfgLeftBtn ? View.VISIBLE : View.GONE);
+                    if (clip != null) clip.setVisibility(cfgRightBtn ? View.VISIBLE : View.GONE);
+                    if (wave != null) wave.setVisibility(cfgVoice ? View.VISIBLE : View.GONE);
+                    log(Log.INFO, TAG, "toggle btns L=" + cfgLeftBtn + " R=" + cfgRightBtn + " V=" + cfgVoice);
+                    return;
+                }
+            }
+
+            // 首次调用：创建所有按钮
             final Resources res = inputView.getResources();
             Context ctx = inputView.getContext();
             final float den = res.getDisplayMetrics().density;
             final int bs = (int) (30 * den + .5f);   // 图标尺寸 30dp
             final int mr = (int) (26 * den + .5f);   // 左右边距 26dp
 
-            // 从 theme 取工具栏图标色：ToolButton 用的是 altKeyTextColor
-            int toolbarColor = 0xFF888888;
+            // 从 theme 取配色
+            int keyFg = 0xFF888888;
+            int accentBg = 0xFF07C160; // 默认绿色
             try {
                 Field tf = inputView.getClass().getSuperclass().getDeclaredField("theme");
                 tf.setAccessible(true);
                 Object theme = tf.get(inputView);
-                toolbarColor = (Integer) theme.getClass().getMethod("getAltKeyTextColor").invoke(theme);
+                keyFg = (Integer) theme.getClass().getMethod("getAltKeyTextColor").invoke(theme);
+                accentBg = (Integer) theme.getClass().getMethod("getAccentKeyBackgroundColor").invoke(theme);
             } catch (Exception ignored) {}
-            final int keyFg = toolbarColor;
+            final int accentColor = accentBg;
 
             // ── 左: IME 切换（纯图标，无背景）──
             final int topExtra = Math.round(-10 * den); // 距离底部 16dp
             if (cfgLeftBtn) {
+            log(Log.INFO, TAG, "addExtraButtons: creating IME button");
             final ImageView ime = new ImageView(ctx);
             ime.setTag("frosted_btn_ime");
             ime.setBackground(null);
             ime.setPadding(0,0,0,0);
-            ime.setImageDrawable(svgIme(den, keyFg, 30));
+            Drawable ico = svgIme(den, keyFg, 30);
+            log(Log.INFO, TAG, "addExtraButtons: svgIme=" + (ico==null?"null":"ok"));
+            ime.setImageDrawable(ico);
             ime.setScaleType(ImageView.ScaleType.FIT_CENTER);
             ime.setClickable(true);
 
@@ -628,6 +618,7 @@ public class MainHook extends XposedModule {
             });
 
             keyboardView.addView(ime, new ViewGroup.LayoutParams(bs, bs));
+            log(Log.INFO, TAG, "addExtraButtons: IME added to kv, childCount=" + keyboardView.getChildCount());
             ime.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
                 v.getLayoutParams().width = bs;
                 v.getLayoutParams().height = bs;
@@ -638,6 +629,7 @@ public class MainHook extends XposedModule {
 
             // ── 右: 剪贴板 ──
             if (cfgRightBtn) {
+            log(Log.INFO, TAG, "addExtraButtons: creating clipboard button");
             final ImageView clip = new ImageView(ctx);
             clip.setTag("frosted_btn_clipboard");
             clip.setBackground(null);
@@ -652,6 +644,7 @@ public class MainHook extends XposedModule {
             });
 
             keyboardView.addView(clip, new ViewGroup.LayoutParams(bs, bs));
+            log(Log.INFO, TAG, "addExtraButtons: clip added, childCount=" + keyboardView.getChildCount());
             // 绝对定位到底部右侧
             clip.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
                 int bw = bs;
@@ -664,10 +657,11 @@ public class MainHook extends XposedModule {
 
             // ── 中: 语音波形线（按住录音） ──
             if (cfgVoice) {
+            log(Log.INFO, TAG, "addExtraButtons: creating voice waveform");
             final WaveformLineView waveView = new WaveformLineView(ctx);
             waveView.setTag("frosted_btn_voice");
             waveView.setIdleColor(keyFg);
-            waveView.setRecordingColor(Color.argb(220, 100, 160, 255)); // 录音中亮蓝紫
+            waveView.setRecordingColor(accentColor); // 跟随主题 accent key 背景色
             waveView.setClickable(true);
             waveView.setFocusable(false);
 
@@ -737,6 +731,7 @@ public class MainHook extends XposedModule {
             });
             } // end if cfgVoice
 
+            buttonsInitialized = true;
             log(Log.INFO,TAG,"✅ extra buttons added");
         } catch (Throwable t) {
             log(Log.WARN,TAG,"addExtraButtons: "+t);
@@ -1218,10 +1213,42 @@ public class MainHook extends XposedModule {
             android.content.BroadcastReceiver r = new android.content.BroadcastReceiver() {
                 @Override
                 public void onReceive(android.content.Context context, android.content.Intent intent) {
-                    // Re-read config from ContentProvider (SettingsActivity wrote there)
-                    readConfig(v);
-                    v.post(() -> applyAllEffects(v));
-                    log(Log.INFO, TAG, "UI_UPDATE: re-applied");
+                    // Log and use intent extras directly (bypasses CP / file)
+                    if (intent.hasExtra("show_left_button")) {
+                        boolean bL = intent.getBooleanExtra("show_left_button", true);
+                        boolean bR = intent.getBooleanExtra("show_right_button", true);
+                        boolean bV = intent.getBooleanExtra("voice_enabled", true);
+                        int bB = intent.getIntExtra("blur_radius", 100);
+                        int bA = intent.getIntExtra("bg_alpha", 60);
+                        int bC = intent.getIntExtra("corner_radius", 20);
+                        log(Log.INFO, TAG, "BROADCAST payload: L=" + bL + " R=" + bR + " V=" + bV);
+
+                        // Save directly to fcitx5's SharedPreferences (always persisted)
+                        try {
+                            android.content.SharedPreferences sp = context
+                                    .getSharedPreferences("fcitx5_enhanced_config", android.content.Context.MODE_PRIVATE);
+                            sp.edit()
+                                .putBoolean("show_left_button", bL)
+                                .putBoolean("show_right_button", bR)
+                                .putBoolean("voice_enabled", bV)
+                                .putInt("blur_radius", bB)
+                                .putInt("bg_alpha", bA)
+                                .putInt("corner_radius", bC)
+                                .commit();
+                            log(Log.INFO, TAG, "saved to fcitx5 SP OK");
+                        } catch (Throwable t) {
+                            log(Log.WARN, TAG, "save to fcitx5 SP failed: " + t);
+                        }
+
+                        // Apply immediately using broadcast values
+                        cfgLeftBtn = bL; cfgRightBtn = bR; cfgVoice = bV;
+                        cfgBlur = bB; cfgAlpha = bA; cfgCorner = bC; cfgToolbar = bC;
+                        v.post(() -> applyAllEffects(v));
+                    } else {
+                        log(Log.WARN, TAG, "BROADCAST without extras, reading from SP");
+                        readConfig(v);
+                        v.post(() -> applyAllEffects(v));
+                    }
                 }
             };
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
