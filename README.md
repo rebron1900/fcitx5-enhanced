@@ -43,7 +43,7 @@
 | 设备 | Android 12+ (API 31+) |
 | Root | [LSPosed](https://github.com/LSPosed/LSPosed) 已激活 |
 | 输入法 | [fcitx5-android](https://github.com/fxliang/fcitx5-android) fx 版 |
-| 语音（可选） | [言犀 / BiBi-Keyboard（说点啥）](https://github.com/BryceWG/BiBi-Keyboard) 或兼容 AIDL 服务 |
+| 语音（可选） | [BiBi-Keyboard（说点啥）](https://github.com/BryceWG/BiBi-Keyboard) 或兼容 AIDL 服务 |
 
 ## 安装
 
@@ -67,7 +67,7 @@ cd fcitx5-enhanced
 
 - [WeType_UI_Enhanced](https://github.com/NEORUAA/WeType_UI_Enhanced) — UI 增强灵感
 - [fcitx5-android](https://github.com/fxliang/fcitx5-android) — 优秀的 Android 输入法
-- [言犀 / BiBi-Keyboard（说点啥）](https://github.com/BryceWG/BiBi-Keyboard) — 语音识别服务
+- [BiBi-Keyboard（说点啥）](https://github.com/BryceWG/BiBi-Keyboard) — 语音识别服务
 
 ## 许可证
 
