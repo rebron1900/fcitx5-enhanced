@@ -1356,13 +1356,31 @@ public class MainHook extends XposedModule {
 
     private void addSettingsEntry(Object fragment, Context ctx) {
         try {
-            // getPreferenceScreen() 在 fcitx5 用的版本中已被移除
-            Method getPm = fragment.getClass().getMethod("getPreferenceManager");
-            Object pm = getPm.invoke(fragment);
-            Method getPs = pm.getClass().getMethod("getPreferenceScreen");
-            Object screen = getPs.invoke(pm);
+            Object screen = null;
+            // Step 1: 从 fragment 层次反射 mPreferenceManager 字段
+            Class<?> cls = fragment.getClass();
+            while (cls != null && screen == null) {
+                try {
+                    java.lang.reflect.Field pmF = cls.getDeclaredField("mPreferenceManager");
+                    pmF.setAccessible(true);
+                    Object pm = pmF.get(fragment);
+                    if (pm != null) {
+                        // Step 2: PreferenceManager 内字段可能被 R8 混淆，按值类型搜索
+                        for (java.lang.reflect.Field f : pm.getClass().getDeclaredFields()) {
+                            f.setAccessible(true);
+                            Object val = f.get(pm);
+                            if (val != null && val.getClass().getName()
+                                    .equals("androidx.preference.PreferenceScreen")) {
+                                screen = val;
+                                break;
+                            }
+                        }
+                    }
+                } catch (NoSuchFieldException ignored) {}
+                cls = cls.getSuperclass();
+            }
             if (screen == null) {
-                log(Log.WARN, TAG, "PreferenceScreen not ready yet");
+                log(Log.WARN, TAG, "PreferenceScreen not found via field");
                 return;
             }
             // 查重
