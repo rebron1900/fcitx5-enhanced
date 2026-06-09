@@ -108,6 +108,10 @@ public class MainHook extends XposedModule {
                 chain.proceed();
                 try {
                     Object fragment = chain.getThisObject();
+                    // 只对 MainFragment 本身处理（onCreate 从父类继承，会钩到所有子 Fragment）
+                    String clsName = fragment.getClass().getName();
+                    if (!clsName.equals("org.fcitx.fcitx5.android.ui.main.MainFragment"))
+                        return null;
                     Context ctx = (Context) fragment.getClass()
                             .getMethod("getActivity").invoke(fragment);
                     if (ctx == null) return null;
@@ -1352,8 +1356,11 @@ public class MainHook extends XposedModule {
 
     private void addSettingsEntry(Object fragment, Context ctx) {
         try {
-            Method getPs = fragment.getClass().getMethod("getPreferenceScreen");
-            Object screen = getPs.invoke(fragment);
+            // getPreferenceScreen() 在 fcitx5 用的版本中已被移除
+            Method getPm = fragment.getClass().getMethod("getPreferenceManager");
+            Object pm = getPm.invoke(fragment);
+            Method getPs = pm.getClass().getMethod("getPreferenceScreen");
+            Object screen = getPs.invoke(pm);
             if (screen == null) {
                 log(Log.WARN, TAG, "PreferenceScreen not ready yet");
                 return;
