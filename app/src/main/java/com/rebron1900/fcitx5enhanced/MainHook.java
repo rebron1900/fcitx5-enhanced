@@ -99,34 +99,25 @@ public class MainHook extends XposedModule {
         }
 
         // Hook fcitx5 设置页 → 添加"小企鹅增强"入口
-        // 直接在 PreferenceScreen 末尾加一项（不依赖定位分类）
+        // hook setPreferenceScreen(PreferenceScreen) 是 public 方法，R8 动不了
+        // PreferenceScreen 作为参数直接拿到，不依赖任何 internal 字段/方法
         try {
-            Class<?> mfCls = Class.forName(
-                    "org.fcitx.fcitx5.android.ui.main.MainFragment", true, param.getClassLoader());
-            Method onCreateM = mfCls.getMethod("onCreate", Bundle.class);
-            hook(onCreateM).intercept(chain -> {
-                chain.proceed();
-                try {
-                    Object fragment = chain.getThisObject();
-                    // 只对 MainFragment 本身处理（onCreate 从父类继承，会钩到所有子 Fragment）
-                    String clsName = fragment.getClass().getName();
-                    if (!clsName.equals("org.fcitx.fcitx5.android.ui.main.MainFragment"))
-                        return null;
-                    Context ctx = (Context) fragment.getClass()
-                            .getMethod("getActivity").invoke(fragment);
-                    if (ctx == null) return null;
-                    // 延迟添加，确保 PreferenceScreen 已建成
-                    new android.os.Handler(android.os.Looper.getMainLooper())
-                            .post(() -> {
-                        try {
-                            addSettingsEntry(fragment, ctx);
-                        } catch (Throwable e) {
-                            log(Log.WARN, TAG, "settings entry delayed add: " + e);
-                        }
-                    });
-                } catch (Throwable e2) {
-                    log(Log.WARN, TAG, "settings entry setup: " + e2);
-                }
+            Class<?> pfc = Class.forName("androidx.preference.PreferenceFragmentCompat");
+            Class<?> psCls = Class.forName("androidx.preference.PreferenceScreen");
+            Method setPs = pfc.getMethod("setPreferenceScreen", psCls);
+            hook(setPs).intercept(chain -> {
+                Object fragment = chain.getThisObject();
+                String clsName = fragment.getClass().getName();
+                // 只对 MainFragment 处理
+                if (!clsName.equals("org.fcitx.fcitx5.android.ui.main.MainFragment"))
+                    return chain.proceed();
+
+                Object screen = chain.getArg(0);
+                chain.proceed(); // 原始 setPreferenceScreen
+
+                if (screen == null) return null;
+                // 查重 + 添加
+                addPrefToScreen(screen, fragment);
                 return null;
             });
         } catch (Throwable e) {
@@ -1354,35 +1345,8 @@ public class MainHook extends XposedModule {
         return svgToDrawable(CLIPBOARD_SVG, density, color, sizeDp);
     }
 
-    private void addSettingsEntry(Object fragment, Context ctx) {
+    private void addPrefToScreen(Object screen, Object fragment) {
         try {
-            Object screen = null;
-            // Step 1: 从 fragment 层次反射 mPreferenceManager 字段
-            Class<?> cls = fragment.getClass();
-            while (cls != null && screen == null) {
-                try {
-                    java.lang.reflect.Field pmF = cls.getDeclaredField("mPreferenceManager");
-                    pmF.setAccessible(true);
-                    Object pm = pmF.get(fragment);
-                    if (pm != null) {
-                        // Step 2: PreferenceManager 内字段可能被 R8 混淆，按值类型搜索
-                        for (java.lang.reflect.Field f : pm.getClass().getDeclaredFields()) {
-                            f.setAccessible(true);
-                            Object val = f.get(pm);
-                            if (val != null && val.getClass().getName()
-                                    .equals("androidx.preference.PreferenceScreen")) {
-                                screen = val;
-                                break;
-                            }
-                        }
-                    }
-                } catch (NoSuchFieldException ignored) {}
-                cls = cls.getSuperclass();
-            }
-            if (screen == null) {
-                log(Log.WARN, TAG, "PreferenceScreen not found via field");
-                return;
-            }
             // 查重
             Method getCnt = screen.getClass().getMethod("getPreferenceCount");
             Method getPref = screen.getClass().getMethod("getPreference", int.class);
@@ -1390,14 +1354,15 @@ public class MainHook extends XposedModule {
             for (int i = 0; i < cnt; i++) {
                 Object p = getPref.invoke(screen, i);
                 String key = (String) p.getClass().getMethod("getKey").invoke(p);
-                if ("fcitx5_enhanced_entry".equals(key)) return; // 已存在
+                if ("fcitx5_enhanced_entry".equals(key)) return;
             }
-            // 找到最后一个 PreferenceCategory
+            // 找到最后一个 PreferenceCategory（通常是"Android"）
             Object cat = screen;
             for (int i = 0; i < cnt; i++) {
                 Object p = getPref.invoke(screen, i);
                 if (p.getClass().getName().contains("PreferenceCategory")) cat = p;
             }
+            Context ctx = (Context) fragment.getClass().getMethod("getContext").invoke(fragment);
             Object pref = Class.forName("androidx.preference.Preference")
                     .getConstructor(Context.class).newInstance(ctx);
             pref.getClass().getMethod("setTitle", CharSequence.class)
@@ -1422,9 +1387,9 @@ public class MainHook extends XposedModule {
             cat.getClass().getMethod("addPreference",
                     Class.forName("androidx.preference.Preference"))
                     .invoke(cat, pref);
-            log(Log.INFO, TAG, "settings entry added");
+            log(Log.INFO, TAG, "✅ settings entry added to Android category");
         } catch (Throwable e) {
-            log(Log.WARN, TAG, "addSettingsEntry failed: " + e);
+            log(Log.WARN, TAG, "addPrefToScreen failed: " + e);
         }
     }
 
