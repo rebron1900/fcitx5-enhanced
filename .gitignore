@@ -6,6 +6,7 @@ local.properties
 .idea/
 .DS_Store
 release.keystore
+release_fcitx5.keystore
 *.apk
 *.apk.idsig
 *.idsig

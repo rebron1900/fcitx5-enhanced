@@ -72,6 +72,11 @@ public class MainHook extends XposedModule {
     private boolean receiverRegistered;
     /** Tracks whether extra buttons have been created in the current view */
     private boolean buttonsInitialized;
+    /** Current InputView reference — updated on each setInputView, used by receiver */
+    private View mCurrentInputView;
+    /** Track global layout listeners to avoid stacking */
+    private ViewTreeObserver.OnGlobalLayoutListener mKeyLayoutListener;
+    private ViewTreeObserver.OnGlobalLayoutListener mPopupLayoutListener;
 
     @Override
     public void onPackageReady(PackageReadyParam param) {
@@ -89,6 +94,7 @@ public class MainHook extends XposedModule {
                 if (v != null && CLS_IV.equals(v.getClass().getName())) {
                     readConfig(v);
                     if (!receiverRegistered) registerReapplyReceiver(v);
+                    mCurrentInputView = v;
                     View fv = v;
                     v.post(() -> applyAllEffects(fv));
                 }
@@ -604,6 +610,7 @@ public class MainHook extends XposedModule {
             log(Log.INFO, TAG, "addExtraButtons: creating IME button");
             final ImageView ime = new ImageView(ctx);
             ime.setTag("frosted_btn_ime");
+            ime.setContentDescription("切换输入法");
             ime.setBackground(null);
             ime.setPadding(0,0,0,0);
             Drawable ico = svgIme(den, keyFg, 30);
@@ -632,6 +639,7 @@ public class MainHook extends XposedModule {
             log(Log.INFO, TAG, "addExtraButtons: creating clipboard button");
             final ImageView clip = new ImageView(ctx);
             clip.setTag("frosted_btn_clipboard");
+            clip.setContentDescription("剪贴板历史");
             clip.setBackground(null);
             clip.setPadding(0,0,0,0);
             clip.setImageDrawable(svgClipboard(den, keyFg, 30));
@@ -660,6 +668,7 @@ public class MainHook extends XposedModule {
             log(Log.INFO, TAG, "addExtraButtons: creating voice waveform");
             final WaveformLineView waveView = new WaveformLineView(ctx);
             waveView.setTag("frosted_btn_voice");
+            waveView.setContentDescription("语音输入");
             waveView.setIdleColor(keyFg);
             waveView.setRecordingColor(accentColor); // 跟随主题 accent key 背景色
             waveView.setClickable(true);
@@ -1084,14 +1093,16 @@ public class MainHook extends XposedModule {
             makeKeysTranslucent(wmView, keyAlpha);
 
             // 2. 监听键盘布局切换 — 每次布局变化自动重应用
-            wmView.getViewTreeObserver().addOnGlobalLayoutListener(
-                new ViewTreeObserver.OnGlobalLayoutListener() {
-                    @Override
-                    public void onGlobalLayout() {
-                        makeKeysTranslucent(wmView, keyAlpha);
-                    }
+            if (mKeyLayoutListener != null) {
+                wmView.getViewTreeObserver().removeOnGlobalLayoutListener(mKeyLayoutListener);
+            }
+            mKeyLayoutListener = new ViewTreeObserver.OnGlobalLayoutListener() {
+                @Override
+                public void onGlobalLayout() {
+                    makeKeysTranslucent(wmView, keyAlpha);
                 }
-            );
+            };
+            wmView.getViewTreeObserver().addOnGlobalLayoutListener(mKeyLayoutListener);
 
             // 3. Popup 悬浮窗背景半透明
             try {
@@ -1102,14 +1113,16 @@ public class MainHook extends XposedModule {
                 final ViewGroup popupRoot = (ViewGroup) getRoot.invoke(popupComponent);
                 if (popupRoot != null) {
                     // 全局布局监听：每次弹窗布局变化时重应用透明度
-                    popupRoot.getViewTreeObserver().addOnGlobalLayoutListener(
-                        new ViewTreeObserver.OnGlobalLayoutListener() {
-                            @Override
-                            public void onGlobalLayout() {
-                                makePopupTranslucent(popupRoot);
-                            }
+                    if (mPopupLayoutListener != null) {
+                        popupRoot.getViewTreeObserver().removeOnGlobalLayoutListener(mPopupLayoutListener);
+                    }
+                    mPopupLayoutListener = new ViewTreeObserver.OnGlobalLayoutListener() {
+                        @Override
+                        public void onGlobalLayout() {
+                            makePopupTranslucent(popupRoot);
                         }
-                    );
+                    };
+                    popupRoot.getViewTreeObserver().addOnGlobalLayoutListener(mPopupLayoutListener);
                     // 首次应用
                     makePopupTranslucent(popupRoot);
                 }
@@ -1243,11 +1256,13 @@ public class MainHook extends XposedModule {
                         // Apply immediately using broadcast values
                         cfgLeftBtn = bL; cfgRightBtn = bR; cfgVoice = bV;
                         cfgBlur = bB; cfgAlpha = bA; cfgCorner = bC; cfgToolbar = bC;
-                        v.post(() -> applyAllEffects(v));
+                        View curView = mCurrentInputView;
+                        if (curView != null) curView.post(() -> applyAllEffects(curView));
                     } else {
                         log(Log.WARN, TAG, "BROADCAST without extras, reading from SP");
                         readConfig(v);
-                        v.post(() -> applyAllEffects(v));
+                        View curView2 = mCurrentInputView;
+                        if (curView2 != null) curView2.post(() -> applyAllEffects(curView2));
                     }
                 }
             };

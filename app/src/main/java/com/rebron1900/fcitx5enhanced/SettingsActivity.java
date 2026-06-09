@@ -1,9 +1,7 @@
 package com.rebron1900.fcitx5enhanced;
 
 import android.app.Activity;
-import android.content.ContentValues;
 import android.content.res.Configuration;
-import android.database.Cursor;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.view.View;
@@ -16,6 +14,9 @@ import android.widget.TextView;
 
 import org.json.JSONObject;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
 import java.io.FileWriter;
 
 public class SettingsActivity extends Activity {
@@ -144,23 +145,30 @@ public class SettingsActivity extends Activity {
 
     private float dp(int dp) { return dp * getResources().getDisplayMetrics().density; }
 
-    private void loadSettings() {
+    private JSONObject readConfigFile() {
+        JSONObject json = new JSONObject();
         try {
-            Cursor c = getContentResolver().query(
-                    ConfigContentProvider.CONTENT_URI, null, null, null, null);
-            if (c != null) {
-                try {
-                    if (c.moveToFirst()) {
-                        sbBlur.setProgress(c.getInt(c.getColumnIndexOrThrow("blur_radius")));
-                        sbAlpha.setProgress(c.getInt(c.getColumnIndexOrThrow("bg_alpha")));
-                        sbCorner.setProgress(c.getInt(c.getColumnIndexOrThrow("corner_radius")));
-                        swVoice.setChecked(c.getInt(c.getColumnIndexOrThrow("voice_enabled")) != 0);
-                        swLeft.setChecked(c.getInt(c.getColumnIndexOrThrow("show_left_button")) != 0);
-                        swRight.setChecked(c.getInt(c.getColumnIndexOrThrow("show_right_button")) != 0);
-                    }
-                } finally { c.close(); }
+            File f = new File(getFilesDir(), "enhanced_config.json");
+            if (f.exists()) {
+                BufferedReader br = new BufferedReader(new FileReader(f));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = br.readLine()) != null) sb.append(line);
+                br.close();
+                json = new JSONObject(sb.toString());
             }
         } catch (Exception ignored) {}
+        return json;
+    }
+
+    private void loadSettings() {
+        JSONObject json = readConfigFile();
+        sbBlur.setProgress(json.optInt("blur_radius", 100));
+        sbAlpha.setProgress(json.optInt("bg_alpha", 60));
+        sbCorner.setProgress(json.optInt("corner_radius", 20));
+        swVoice.setChecked(json.optBoolean("voice_enabled", true));
+        swLeft.setChecked(json.optBoolean("show_left_button", true));
+        swRight.setChecked(json.optBoolean("show_right_button", true));
         updateLabels();
     }
 
@@ -171,28 +179,14 @@ public class SettingsActivity extends Activity {
     }
 
     private void saveAndApply() {
-        ContentValues cv = new ContentValues();
-        cv.put("blur_radius", sbBlur.getProgress());
-        cv.put("bg_alpha", sbAlpha.getProgress());
-        cv.put("corner_radius", sbCorner.getProgress());
-        cv.put("voice_enabled", swVoice.isChecked());
-        cv.put("show_left_button", swLeft.isChecked());
-        cv.put("show_right_button", swRight.isChecked());
-
         android.util.Log.i("Fcitx5Enh", "Settings saving: L=" + swLeft.isChecked() + " R=" + swRight.isChecked() + " V=" + swVoice.isChecked());
 
-        // 直接写文件（模块私有目录，不依赖 SharedPreferences / ContentProvider）
+        // 直接写文件（不再经过 ContentProvider）
         saveToFile();
 
-        // 同时通过 CP 写（同进程，文件共享）
-        try {
-            getContentResolver().update(ConfigContentProvider.CONTENT_URI, cv, null, null);
-        } catch (Exception e) {
-            android.util.Log.e("Fcitx5Enh", "Settings CP update failed: " + e);
-        }
-
+        // 发送广播通知 fcitx5 进程应用配置
         android.content.Intent intent = new android.content.Intent("com.rebron1900.fcitx5enhanced.UI_UPDATE");
-        // 广播携带配置值，供 MainHook 直接验真（不依赖 CP/文件）
+        // 广播携带配置值，供 MainHook 直接验真（不依赖文件）
         intent.putExtra("show_left_button", swLeft.isChecked());
         intent.putExtra("show_right_button", swRight.isChecked());
         intent.putExtra("voice_enabled", swVoice.isChecked());
