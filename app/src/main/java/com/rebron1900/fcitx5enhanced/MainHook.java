@@ -1351,24 +1351,18 @@ public class MainHook extends XposedModule {
 
     private void addPrefToScreen(Object screen, Object fragment, ClassLoader cl) {
         try {
-            // 查重
-            Method getCnt = screen.getClass().getMethod("getPreferenceCount");
-            Method getPref = screen.getClass().getMethod("getPreference", int.class);
-            int cnt = (int) getCnt.invoke(screen);
-            for (int i = 0; i < cnt; i++) {
-                Object p = getPref.invoke(screen, i);
-                String key = (String) p.getClass().getMethod("getKey").invoke(p);
-                if ("fcitx5_enhanced_entry".equals(key)) return;
-            }
-            // 找到最后一个 PreferenceCategory（通常是"Android"）
-            Object cat = screen;
-            for (int i = 0; i < cnt; i++) {
-                Object p = getPref.invoke(screen, i);
-                if (p.getClass().getName().contains("PreferenceCategory")) cat = p;
-            }
+            // 查重：findPreference(CharSequence key)
+            // 注意：getPreferenceCount/getPreference 也被 R8 移除
+            try {
+                Method findP = screen.getClass().getMethod("findPreference", CharSequence.class);
+                Object existing = findP.invoke(screen, "fcitx5_enhanced_entry");
+                if (existing != null) return;
+            } catch (NoSuchMethodException ignored) {}
+            // 直接加到 PreferenceScreen（末尾），不找 Category
             Context ctx = (Context) fragment.getClass().getMethod("getContext").invoke(fragment);
             Object pref = Class.forName("androidx.preference.Preference", false, cl)
-                    .getConstructor(Context.class).newInstance(ctx);
+                    .getConstructor(Context.class, android.util.AttributeSet.class)
+                    .newInstance(ctx, null);
             pref.getClass().getMethod("setTitle", CharSequence.class)
                     .invoke(pref, "小企鹅增强");
             pref.getClass().getMethod("setSummary", CharSequence.class)
@@ -1388,9 +1382,9 @@ public class MainHook extends XposedModule {
             pref.getClass().getMethod("setOnPreferenceClickListener",
                     Class.forName("androidx.preference.Preference$OnPreferenceClickListener", false, cl))
                     .invoke(pref, onClk);
-            cat.getClass().getMethod("addPreference",
+            screen.getClass().getMethod("addPreference",
                     Class.forName("androidx.preference.Preference", false, cl))
-                    .invoke(cat, pref);
+                    .invoke(screen, pref);
             log(Log.INFO, TAG, "✅ settings entry added to Android category");
         } catch (Throwable e) {
             log(Log.WARN, TAG, "addPrefToScreen failed: " + e);
