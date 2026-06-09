@@ -60,7 +60,7 @@ import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam;
  */
 public class MainHook extends XposedModule {
 
-    private static final String TAG = "FrostedGlass";
+    private static final String TAG = "Fcitx5Enh";
     private static final String PKG = "org.fcitx.fcitx5.android.fx";
     private static final String CLS_SVC = "org.fcitx.fcitx5.android.input.FcitxInputMethodService";
     private static final String CLS_IV = "org.fcitx.fcitx5.android.input.InputView";
@@ -99,63 +99,29 @@ public class MainHook extends XposedModule {
         }
 
         // Hook fcitx5 设置页 → 添加"小企鹅增强"入口
+        // 直接在 PreferenceScreen 末尾加一项（不依赖定位分类）
         try {
             Class<?> mfCls = Class.forName(
                     "org.fcitx.fcitx5.android.ui.main.MainFragment", true, param.getClassLoader());
-            Method onPrefM = mfCls.getMethod("onCreatePreferences", Bundle.class, String.class);
-            hook(onPrefM).intercept(chain -> {
+            Method onCreateM = mfCls.getMethod("onCreate", Bundle.class);
+            hook(onCreateM).intercept(chain -> {
                 chain.proceed();
                 try {
-                    Object fragment = chain.getObject();
-                    Method getPs = fragment.getClass().getMethod("getPreferenceScreen");
-                    Object screen = getPs.invoke(fragment);
-                    if (screen == null) return null;
-
-                    // 查找 "Android" PreferenceCategory
-                    Method getCnt = screen.getClass().getMethod("getPreferenceCount");
-                    Method getPref = screen.getClass().getMethod("getPreference", int.class);
-                    int cnt = (int) getCnt.invoke(screen);
-                    Object androidCat = null;
-                    for (int i = 0; i < cnt; i++) {
-                        Object p = getPref.invoke(screen, i);
-                        if (p.getClass().getName().contains("PreferenceCategory")) {
-                            Method getTitle = p.getClass().getMethod("getTitle");
-                            CharSequence title = (CharSequence) getTitle.invoke(p);
-                            if (title != null && "Android".contentEquals(title)) {
-                                androidCat = p;
-                                break;
-                            }
-                        }
-                    }
-                    if (androidCat == null) return null;
-
+                    Object fragment = chain.getThisObject();
                     Context ctx = (Context) fragment.getClass()
                             .getMethod("getActivity").invoke(fragment);
-                    Object pref = Class.forName("androidx.preference.Preference")
-                            .getConstructor(Context.class).newInstance(ctx);
-                    pref.getClass().getMethod("setTitle", CharSequence.class)
-                            .invoke(pref, "小企鹅增强");
-                    pref.getClass().getMethod("setSummary", CharSequence.class)
-                            .invoke(pref, "毛玻璃、圆角、底部按钮配置");
-
-                    java.lang.reflect.Proxy onClk = (java.lang.reflect.Proxy) java.lang.reflect.Proxy.newProxyInstance(
-                            pref.getClass().getClassLoader(),
-                            new Class[]{Class.forName("androidx.preference.Preference$OnPreferenceClickListener")},
-                            (java.lang.reflect.InvocationHandler) (proxy, method, args) -> {
-                                Intent intent = new Intent(ctx, SettingsActivity.class);
-                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                                ctx.startActivity(intent);
-                                return true;
-                            });
-                    pref.getClass().getMethod("setOnPreferenceClickListener",
-                            Class.forName("androidx.preference.Preference$OnPreferenceClickListener"))
-                            .invoke(pref, onClk);
-                    androidCat.getClass().getMethod("addPreference",
-                            Class.forName("androidx.preference.Preference"))
-                            .invoke(androidCat, pref);
-                    log(Log.INFO, TAG, "settings entry added to Android category");
+                    if (ctx == null) return null;
+                    // 延迟添加，确保 PreferenceScreen 已建成
+                    new android.os.Handler(android.os.Looper.getMainLooper())
+                            .post(() -> {
+                        try {
+                            addSettingsEntry(fragment, ctx);
+                        } catch (Throwable e) {
+                            log(Log.WARN, TAG, "settings entry delayed add: " + e);
+                        }
+                    });
                 } catch (Throwable e2) {
-                    log(Log.WARN, TAG, "settings entry add failed: " + e2);
+                    log(Log.WARN, TAG, "settings entry setup: " + e2);
                 }
                 return null;
             });
@@ -1382,6 +1348,59 @@ public class MainHook extends XposedModule {
 
     private static Drawable svgClipboard(float density, int color, int sizeDp) {
         return svgToDrawable(CLIPBOARD_SVG, density, color, sizeDp);
+    }
+
+    private void addSettingsEntry(Object fragment, Context ctx) {
+        try {
+            Method getPs = fragment.getClass().getMethod("getPreferenceScreen");
+            Object screen = getPs.invoke(fragment);
+            if (screen == null) {
+                log(Log.WARN, TAG, "PreferenceScreen not ready yet");
+                return;
+            }
+            // 查重
+            Method getCnt = screen.getClass().getMethod("getPreferenceCount");
+            Method getPref = screen.getClass().getMethod("getPreference", int.class);
+            int cnt = (int) getCnt.invoke(screen);
+            for (int i = 0; i < cnt; i++) {
+                Object p = getPref.invoke(screen, i);
+                String key = (String) p.getClass().getMethod("getKey").invoke(p);
+                if ("fcitx5_enhanced_entry".equals(key)) return; // 已存在
+            }
+            // 找到最后一个 PreferenceCategory
+            Object cat = screen;
+            for (int i = 0; i < cnt; i++) {
+                Object p = getPref.invoke(screen, i);
+                if (p.getClass().getName().contains("PreferenceCategory")) cat = p;
+            }
+            Object pref = Class.forName("androidx.preference.Preference")
+                    .getConstructor(Context.class).newInstance(ctx);
+            pref.getClass().getMethod("setTitle", CharSequence.class)
+                    .invoke(pref, "小企鹅增强");
+            pref.getClass().getMethod("setSummary", CharSequence.class)
+                    .invoke(pref, "毛玻璃、圆角、底部按钮配置");
+            pref.getClass().getMethod("setKey", String.class)
+                    .invoke(pref, "fcitx5_enhanced_entry");
+
+            java.lang.reflect.Proxy onClk = (java.lang.reflect.Proxy) java.lang.reflect.Proxy.newProxyInstance(
+                    pref.getClass().getClassLoader(),
+                    new Class[]{Class.forName("androidx.preference.Preference$OnPreferenceClickListener")},
+                    (proxy, method, args) -> {
+                        Intent intent = new Intent(ctx, SettingsActivity.class);
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        ctx.startActivity(intent);
+                        return true;
+                    });
+            pref.getClass().getMethod("setOnPreferenceClickListener",
+                    Class.forName("androidx.preference.Preference$OnPreferenceClickListener"))
+                    .invoke(pref, onClk);
+            cat.getClass().getMethod("addPreference",
+                    Class.forName("androidx.preference.Preference"))
+                    .invoke(cat, pref);
+            log(Log.INFO, TAG, "settings entry added");
+        } catch (Throwable e) {
+            log(Log.WARN, TAG, "addSettingsEntry failed: " + e);
+        }
     }
 
     @Override
