@@ -1,0 +1,6 @@
+minApiVersion=101
+targetApiVersion=101
+xposedminversion=101
+xposedname=Fcitx5 磨砂键盘 + WebDAV 同步
+xposedauthor=1900
+xposeddescription=Fcitx5 工具栏圆角 + WebDAV 双向数据同步

@@ -1,0 +1,68 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
+        uses: malinskiy/action-android/install-sdk@release
+
+      - name: Build APK
+        run: ./gradlew assembleRelease
+
+      - name: Sign APK
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.KEY_PASS }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::warning::No KEYSTORE_B64 secret set — APK will be unsigned"
+            exit 0
+          fi
+          APK=$(find app/build/outputs/apk/release -name '*.apk' | head -1)
+          echo "$KEYSTORE_B64" | base64 -d > release.keystore
+          $ANDROID_HOME/build-tools/*/apksigner sign \
+            --ks release.keystore \
+            --ks-key-alias "$KEY_ALIAS" \
+            --ks-pass env:KEY_PASS \
+            --key-pass env:KEY_PASS \
+            --v2-signing-enabled true \
+            --v3-signing-enabled true \
+            "$APK"
+          echo "Signed: $APK"
+
+      - name: Rename APK
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          [ -z "$VERSION" ] && VERSION=$(date +%Y%m%d)
+          find app/build/outputs/apk/release -name '*.apk' -exec mv {} \
+            "Fcitx5Enhanced-v${VERSION}.apk" \;
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Fcitx5Enhanced
+          path: Fcitx5Enhanced-*.apk
+          if-no-files-found: error
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: Fcitx5Enhanced-*.apk
+          generate_release_notes: true

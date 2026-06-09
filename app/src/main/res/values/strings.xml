@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="module_description">Fcitx5 键盘毛玻璃背景 + 圆角美化</string>
+
+    <string name="beauty_title">键盘美化</string>
+
+    <string name="label_blur">毛玻璃模糊</string>
+    <string name="blur_desc">数值越大，磨砂感越强。0 = 关闭模糊</string>
+
+    <string name="label_alpha">背景透明度</string>
+    <string name="alpha_desc">数值越高越不透明。建议 60-80% 兼顾磨砂与可见性</string>
+
+    <string name="label_corner">键盘圆角</string>
+    <string name="corner_desc">键盘整体四角圆角。0 = 关闭</string>
+
+    <string name="label_toolbar">工具栏圆角</string>
+    <string name="toolbar_desc">顶部工具栏左右圆角。0 = 关闭</string>
+
+    <string name="apply_notice">设置修改后实时生效，无需保存</string>
+</resources>

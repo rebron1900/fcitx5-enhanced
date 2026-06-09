@@ -1,0 +1,249 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:padding="20dp"
+    android:background="#f0f0f0"
+    android:fitsSystemWindows="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Fcitx5 增强"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="#333"
+            android:layout_marginBottom="20dp" />
+
+        <!-- ── Card: blur ── -->
+        <LinearLayout
+            android:id="@+id/card_blur"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#fff"
+            android:padding="16dp"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="毛玻璃模糊"
+                    android:textSize="15sp"
+                    android:textColor="#333" />
+                <TextView
+                    android:id="@+id/tv_blur_val"
+                    android:layout_width="40dp"
+                    android:layout_height="wrap_content"
+                    android:gravity="end"
+                    android:text="36"
+                    android:textSize="15sp"
+                    android:textColor="#6200EE" />
+            </LinearLayout>
+            <SeekBar
+                android:id="@+id/sb_blur_radius"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="100"
+                android:progress="36" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="数值越大，磨砂感越强。0 = 关闭模糊"
+                android:textSize="12sp"
+                android:textColor="#999"
+                android:layout_marginTop="4dp" />
+        </LinearLayout>
+
+        <!-- ── Card: alpha ── -->
+        <LinearLayout
+            android:id="@+id/card_alpha"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#fff"
+            android:padding="16dp"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="背景透明度"
+                    android:textSize="15sp"
+                    android:textColor="#333" />
+                <TextView
+                    android:id="@+id/tv_alpha_val"
+                    android:layout_width="40dp"
+                    android:layout_height="wrap_content"
+                    android:gravity="end"
+                    android:text="78%"
+                    android:textSize="15sp"
+                    android:textColor="#6200EE" />
+            </LinearLayout>
+            <SeekBar
+                android:id="@+id/sb_bg_alpha"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="255"
+                android:progress="200" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="数值越高越不透明。建议 60-80%"
+                android:textSize="12sp"
+                android:textColor="#999"
+                android:layout_marginTop="4dp" />
+        </LinearLayout>
+
+        <!-- ── Card: corner ── -->
+        <LinearLayout
+            android:id="@+id/card_corner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#fff"
+            android:padding="16dp"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="键盘圆角"
+                    android:textSize="15sp"
+                    android:textColor="#333" />
+                <TextView
+                    android:id="@+id/tv_corner_val"
+                    android:layout_width="40dp"
+                    android:layout_height="wrap_content"
+                    android:gravity="end"
+                    android:text="28"
+                    android:textSize="15sp"
+                    android:textColor="#6200EE" />
+            </LinearLayout>
+            <SeekBar
+                android:id="@+id/sb_corner_radius"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:max="48"
+                android:progress="28" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="键盘整体四角圆角。0 = 关闭"
+                android:textSize="12sp"
+                android:textColor="#999"
+                android:layout_marginTop="4dp" />
+        </LinearLayout>
+
+        <!-- ── Card: button toggles ── -->
+        <LinearLayout
+            android:id="@+id/card_buttons"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#fff"
+            android:padding="16dp"
+            android:layout_marginBottom="12dp">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="底部按钮"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:textColor="#333"
+                android:layout_marginBottom="8dp" />
+
+            <!-- Voice input -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingVertical="8dp">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="语音输入"
+                    android:textSize="15sp"
+                    android:textColor="#333" />
+                <Switch
+                    android:id="@+id/sw_voice"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true" />
+            </LinearLayout>
+
+            <!-- Left button -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingVertical="8dp">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="左按钮（输入法切换）"
+                    android:textSize="15sp"
+                    android:textColor="#333" />
+                <Switch
+                    android:id="@+id/sw_left_btn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true" />
+            </LinearLayout>
+
+            <!-- Right button -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:paddingVertical="8dp">
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="右按钮（剪贴板）"
+                    android:textSize="15sp"
+                    android:textColor="#333" />
+                <Switch
+                    android:id="@+id/sw_right_btn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:checked="true" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="修改实时生效，无需保存"
+            android:textSize="12sp"
+            android:textColor="#999"
+            android:gravity="center"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="32dp" />
+
+    </LinearLayout>
+</ScrollView>
