@@ -61,7 +61,28 @@ public class ConfigContentProvider extends ContentProvider {
         if (values.containsKey("show_right_button"))
             editor.putBoolean("show_right_button", values.getAsBoolean("show_right_button"));
         editor.apply();
+        saveToFile();
         return 1;
+    }
+
+    /** 持久化到 JSON 文件，供目标进程 fallback 读取 */
+    private void saveToFile() {
+        try {
+            SharedPreferences sp = getContext()
+                    .getSharedPreferences(SP_NAME, android.content.Context.MODE_PRIVATE);
+            org.json.JSONObject json = new org.json.JSONObject();
+            json.put("blur_radius", sp.getInt("blur_radius", 100));
+            json.put("bg_alpha", sp.getInt("bg_alpha", 60));
+            json.put("corner_radius", sp.getInt("corner_radius", 20));
+            json.put("toolbar_radius", sp.getInt("corner_radius", 20));
+            json.put("voice_enabled", sp.getBoolean("voice_enabled", true));
+            json.put("show_left_button", sp.getBoolean("show_left_button", true));
+            json.put("show_right_button", sp.getBoolean("show_right_button", true));
+            java.io.FileOutputStream fos = new java.io.FileOutputStream(
+                    "/data/local/tmp/fcitx5_enhanced_config.json");
+            fos.write(json.toString(2).getBytes("UTF-8"));
+            fos.close();
+        } catch (Exception ignored) {}
     }
 
     @Override public String getType(Uri uri) { return "vnd.android.cursor.dir/vnd.fcitx5enhanced.config"; }
