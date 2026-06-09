@@ -98,38 +98,8 @@ public class MainHook extends XposedModule {
             log(Log.ERROR, TAG, "hook failed", t);
         }
 
-        // Hook fcitx5 设置页 → 添加"小企鹅增强"入口
-        // hook setPreferenceScreen(PreferenceScreen) 是 public 方法，R8 动不了
-        // PreferenceScreen 作为参数直接拿到，不依赖任何 internal 字段/方法
-        try {
-            Class<?> pfc = Class.forName("androidx.preference.PreferenceFragmentCompat",
-                    true, param.getClassLoader());
-            Class<?> psCls = Class.forName("androidx.preference.PreferenceScreen",
-                    true, param.getClassLoader());
-            Method setPs = pfc.getMethod("setPreferenceScreen", psCls);
-            hook(setPs).intercept(chain -> {
-                Object fragment = chain.getThisObject();
-                String clsName = fragment.getClass().getName();
-                // 只对 MainFragment 处理
-                if (!clsName.equals("org.fcitx.fcitx5.android.ui.main.MainFragment"))
-                    return chain.proceed();
-
-                Object screen = chain.getArg(0);
-                chain.proceed(); // 原始 setPreferenceScreen
-
-                if (screen == null) return null;
-                // 用 screen 的 classLoader（fcitx5 的类加载器）
-                ClassLoader targetLoader = screen.getClass().getClassLoader();
-                // 查重 + 添加
-                addPrefToScreen(screen, fragment, targetLoader);
-                return null;
-            });
-        } catch (Throwable e) {
-            log(Log.WARN, TAG, "settings hook setup failed: " + e);
-        }
-
-        // Popup 悬浮窗背景半透明 — 后面在 applyKeyEffects 里通过监听 popup root 实现
-        // (LSPosed API 101.0.1 的 Interceptor.Chain 没有 getObject())
+        // 设置入口通过桌面图标启动（放弃 fcitx5 设置页注入，因 R8 全模式移除了所有
+        // AndroidX Preference API，无法可靠注入）
     }
 
     // ══════════════════════════════════════════
@@ -1347,48 +1317,6 @@ public class MainHook extends XposedModule {
 
     private static Drawable svgClipboard(float density, int color, int sizeDp) {
         return svgToDrawable(CLIPBOARD_SVG, density, color, sizeDp);
-    }
-
-    private void addPrefToScreen(Object screen, Object fragment, ClassLoader cl) {
-        try {
-            // 查重：findPreference(CharSequence key)
-            // 注意：getPreferenceCount/getPreference 也被 R8 移除
-            try {
-                Method findP = screen.getClass().getMethod("findPreference", CharSequence.class);
-                Object existing = findP.invoke(screen, "fcitx5_enhanced_entry");
-                if (existing != null) return;
-            } catch (NoSuchMethodException ignored) {}
-            // 直接加到 PreferenceScreen（末尾），不找 Category
-            Context ctx = (Context) fragment.getClass().getMethod("getContext").invoke(fragment);
-            Object pref = Class.forName("androidx.preference.Preference", false, cl)
-                    .getConstructor(Context.class, android.util.AttributeSet.class)
-                    .newInstance(ctx, null);
-            pref.getClass().getMethod("setTitle", CharSequence.class)
-                    .invoke(pref, "小企鹅增强");
-            pref.getClass().getMethod("setSummary", CharSequence.class)
-                    .invoke(pref, "毛玻璃、圆角、底部按钮配置");
-            pref.getClass().getMethod("setKey", String.class)
-                    .invoke(pref, "fcitx5_enhanced_entry");
-
-            java.lang.reflect.Proxy onClk = (java.lang.reflect.Proxy) java.lang.reflect.Proxy.newProxyInstance(
-                    cl,
-                    new Class[]{Class.forName("androidx.preference.Preference$OnPreferenceClickListener", false, cl)},
-                    (proxy, method, args) -> {
-                        Intent intent = new Intent(ctx, SettingsActivity.class);
-                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                        ctx.startActivity(intent);
-                        return true;
-                    });
-            pref.getClass().getMethod("setOnPreferenceClickListener",
-                    Class.forName("androidx.preference.Preference$OnPreferenceClickListener", false, cl))
-                    .invoke(pref, onClk);
-            screen.getClass().getMethod("addPreference",
-                    Class.forName("androidx.preference.Preference", false, cl))
-                    .invoke(screen, pref);
-            log(Log.INFO, TAG, "✅ settings entry added to Android category");
-        } catch (Throwable e) {
-            log(Log.WARN, TAG, "addPrefToScreen failed: " + e);
-        }
     }
 
     @Override

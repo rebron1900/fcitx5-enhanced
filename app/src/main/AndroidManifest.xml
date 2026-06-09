@@ -21,7 +21,12 @@
         <activity
             android:name=".SettingsActivity"
             android:exported="true"
-            android:label="Fcitx5 增强配置" />
+            android:label="Fcitx5 增强配置">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
 
         <provider
             android:name=".ConfigContentProvider"
