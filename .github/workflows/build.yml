@@ -19,7 +19,7 @@ jobs:
           java-version: 21
 
       - name: Setup Android SDK
-        uses: malinskiy/action-android/install-sdk@v0.1.7
+        uses: malinskiy/action-android/install-sdk@0.1.7
 
       - name: Build APK
         run: ./gradlew assembleRelease
