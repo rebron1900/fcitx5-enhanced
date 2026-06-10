@@ -135,8 +135,8 @@ public class WaveformLineView extends View {
         // 音量→波幅映射（加倍，让正常说话也能大幅摆动，上限 1.0）
         float volScale = Math.min(1.0f, mVolume * 0.02f);
 
-        // 最大波形幅度：拉到视图高度 100%
-        float maxAmp = h * 1.0f;
+        // 最大波形幅度：限制在 ±45% 视图高度，避免超出被剪裁
+        float maxAmp = h * 0.45f;
 
         // 波动速度：每帧 0.04，舒缓波动
         mPhase += 0.025f;
