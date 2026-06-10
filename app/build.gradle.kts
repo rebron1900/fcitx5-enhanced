@@ -10,8 +10,8 @@ android {
         applicationId = "com.rebron1900.fcitx5enhanced"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.1.2"
+        versionCode = 5
+        versionName = "1.2.0"
     }
 
     buildTypes {
