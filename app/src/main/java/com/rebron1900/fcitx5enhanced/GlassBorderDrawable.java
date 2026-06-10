@@ -13,7 +13,7 @@ import android.graphics.drawable.Drawable;
  * 玻璃质感渐变背景 Drawable。
  * 支持两种渐变模式：
  * - 弹窗：从上到下渐变描边（顶部亮→底部暗）
- * - 键盘：对角高光（左上亮→中间暗→右下亮），弧线中间最亮
+ * - 键盘：上边缘整条高光（左上+右上亮→中间暗→底部暗）
  */
 public class GlassBorderDrawable extends Drawable {
 
@@ -61,14 +61,13 @@ public class GlassBorderDrawable extends Drawable {
                 mRadius, mRadius, Path.Direction.CW);
 
         if (mDiagonalGlow) {
-            // === 对角角标高光 ===
-            // 左上亮、中间透明、右下暗 — 拐角弧线中间最亮
-            // 参考掘金 MyGradientBorderDrawable 实现
+            // === 上边缘整条高光（左上+右上玻璃描边） ===
+            // 顶部亮→中间透明→底部暗，高光覆盖整条上边
             mBorderPaint.setShader(new LinearGradient(
-                    bounds.left, bounds.top,
-                    bounds.right, bounds.bottom,
+                    0, bounds.top,
+                    0, bounds.bottom,
                     new int[]{mTopBorderColor, 0x00000000, mBottomBorderColor},
-                    null, // 等间距：0→0.5→1
+                    null,
                     Shader.TileMode.CLAMP));
         } else {
             // === 弹窗模式：从上到下渐变 ===
