@@ -148,17 +148,11 @@ public class WaveformLineView extends View {
         // 4 层参数：主线 1.0，其他线继续加大
         float[] pathFuncs = {1.0f, 0.9f, -0.8f, -1.0f};
         float[] layerWidths = {strokeW * 0.8f, strokeW * 0.6f, strokeW * 0.5f, strokeW * 0.4f};
-        int[] layerAlphas = {255, 220, 190, 150};
+        int[] layerAlphas = {255, 255, 255, 255};
         int[] layerColors = new int[4];
-        float[] hsv = new float[3];
-        Color.colorToHSV(mRecColor, hsv);
-        float baseBright = Math.max(0.5f, hsv[2]);
-        float baseSat = Math.max(0.3f, hsv[1]);
+        int lr = Color.red(mRecColor), lg = Color.green(mRecColor), lb = Color.blue(mRecColor);
         for (int i = 0; i < 4; i++) {
-            float bright = Math.min(1f, baseBright + 0.2f - i * 0.15f);
-            float sat = Math.max(0.15f, baseSat - i * 0.12f);
-            layerColors[i] = Color.HSVToColor(layerAlphas[i],
-                    new float[]{hsv[0], sat, Math.max(0.4f, bright)});
+            layerColors[i] = Color.argb(layerAlphas[i], lr, lg, lb);
         }
 
         // 预计算波形值

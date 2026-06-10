@@ -66,6 +66,7 @@ cd fcitx5-enhanced
 ## 致谢
 
 - [WeType_UI_Enhanced](https://github.com/NEORUAA/WeType_UI_Enhanced) — UI 增强灵感
+- [WaveLineView](https://github.com/Jay-Goo/WaveLineView) — 录音波形动画（振幅响应管线参考）
 - [fcitx5-android](https://github.com/fxliang/fcitx5-android) — 优秀的 Android 输入法
 - [BiBi-Keyboard（说点啥）](https://github.com/BryceWG/BiBi-Keyboard) — 语音识别服务
 
