@@ -11,9 +11,9 @@
 
 </div>
 
-| 磨砂玻璃效果 | 暗色键盘 | 快速面板 |
+| 语音调用 | 亮色模式 | 暗色模式 |
 |:-:|:-:|:-:|
-| <img src="screenshots/screenshot-1.jpg" width="260" alt="磨砂玻璃效果" /> | <img src="screenshots/screenshot-2.jpg" width="260" alt="暗色键盘效果" /> | <img src="screenshots/screenshot-3.jpg" width="260" alt="快速面板" /> |
+| <img src="screenshots/screenshot-1.jpg" width="260" alt="语音调用" /> | <img src="screenshots/screenshot-2.jpg" width="260" alt="亮色模式" /> | <img src="screenshots/screenshot-3.jpg" width="260" alt="暗色模式" /> |
 
 ## 功能
 
