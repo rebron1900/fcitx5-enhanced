@@ -11,22 +11,32 @@ import android.view.MotionEvent;
 import android.view.View;
 
 /**
- * 波形线 View。
- * 空闲时：一条水平渐隐线
- * 录音时：实时 RMS 振幅波形
+ * 波形线 View，基于 jaygoo/widget/wlv/WaveLineView 设计重写。
+ *
+ * 振幅管线：
+ *   setAmplitude(0~1) → 内部放大到 0~100 音量
+ *   → softerChangeVolume() 按 perVolume(=sensibility*0.35) 每帧追赶
+ *   → height * volume * 0.01 * waveFormula * pathFunc
+ *
+ * 可调参数：mSamplingSize（采样密度）、mSensibility（响应灵敏度 1~10）
  */
 public class WaveformLineView extends View {
 
     private Paint mLinePaint;
     private Path mPath;
-    private float mAmplitude = 0f;
-    private float mTarget = 0f;
     private int mIdleColor, mRecColor, mCurColor;
+
+    /** ── WaveLineView 风格参数 ── */
+    private int mSamplingSize = 64;
+    private int mSensibility = 10;           // 1~10，越大响应越快
+    private float mVolume = 0f;              // 当前音量 0~100
+    private int mTargetVolume = 0;           // 目标音量 0~100
+    private float mPerVolume;                // = sensibility * 0.35f
+
     private float mPhase = 0f;
     private boolean mRecording = false;
     private OnTouchListener mListener;
 
-    private static final int SEGS = 40;
     private float mDensity;
 
     public WaveformLineView(Context context) {
@@ -40,7 +50,20 @@ public class WaveformLineView extends View {
         mIdleColor = 0x88CCCCCC;
         mRecColor = 0xFF4F6BF6;
         mCurColor = mIdleColor;
+        mPerVolume = mSensibility * 0.35f;
     }
+
+    /** 设置采样点密度（默认 40） */
+    public void setSamplingSize(int sz) {
+        mSamplingSize = Math.max(8, Math.min(128, sz));
+    }
+
+    /** 设置响应灵敏度 1~10，默认 5。越大振幅变化越快。 */
+    public void setSensibility(int s) {
+        mSensibility = Math.max(1, Math.min(10, s));
+        mPerVolume = mSensibility * 0.35f;
+    }
+    public int getSensibility() { return mSensibility; }
 
     public void setIdleColor(int c) { mIdleColor = c; mCurColor = mRecording ? mRecColor : mIdleColor; }
     public void setRecordingColor(int c) { mRecColor = c; mCurColor = mRecording ? mRecColor : mIdleColor; }
@@ -49,17 +72,20 @@ public class WaveformLineView extends View {
         mRecording = r;
         mCurColor = r ? mRecColor : mIdleColor;
         if (!r) {
-            mTarget = 0f;
+            mTargetVolume = 0;
         }
         invalidate();
     }
 
+    /** 从 AIDL 服务接收归一化振幅 0~1，内部放大到 0~100 */
     public void setAmplitude(float a) {
         if (a < 0) a = 0;
         if (a > 1) a = 1;
-        mTarget = a;
-        if (a > 0.02f && !mRecording) {
-            // 有音频输入但不在录音状态（闲时呼吸）
+        // 放大到 0~100：小声音 200x 放大保证幅度；低于阈值则归零
+        int vol = Math.min(100, (int)(a * 200f));
+        if (vol < 3) vol = 0;
+        mTargetVolume = vol;
+        if (vol > 0 && !mRecording) {
             invalidate();
             return;
         }
@@ -71,12 +97,8 @@ public class WaveformLineView extends View {
         int w = getWidth(), h = getHeight();
         if (w <= 0 || h <= 0) return;
 
-        // 平滑振幅过渡
-        mAmplitude += (mTarget - mAmplitude) * 0.25f;
-        if (Math.abs(mAmplitude - mTarget) < 0.002f) mAmplitude = mTarget;
-
-        mPhase += 0.12f;
-        if (mPhase > 200f) mPhase = 0;
+        // ── WaveLineView 风格音量平滑 ──
+        softerChangeVolume();
 
         float pad = 6 * mDensity;
         float lineW = w - pad * 2;
@@ -88,9 +110,7 @@ public class WaveformLineView extends View {
         int r = Color.red(mCurColor), g = Color.green(mCurColor), b = Color.blue(mCurColor);
         int a = Color.alpha(mCurColor);
 
-        // ── 波形线条 ──
-
-        // 渐变遮罩：中间实色 → 两端渐隐到透明
+        // ── 渐变遮罩 ──
         int edgeColor = Color.argb(0, r, g, b);
         int centerColor = Color.argb(a, r, g, b);
         LinearGradient lineGrad = new LinearGradient(
@@ -101,43 +121,103 @@ public class WaveformLineView extends View {
         );
 
         if (!mRecording) {
-            // 空闲：水平线
+            // 空闲：水平直线
+            mPath.reset();
+            mPath.moveTo(pad, cy);
+            mPath.lineTo(w - pad, cy);
             mLinePaint.setShader(lineGrad);
             mLinePaint.setStrokeWidth(strokeW);
-            c.drawLine(pad, cy, w - pad, cy, mLinePaint);
+            c.drawPath(mPath, mLinePaint);
             return;
         }
 
-        // 有效振幅：取 max(振幅, 0.05) 确保最低可见波动（呼吸感）
-        float amp = Math.max(mAmplitude, 0.05f);
-        float maxH = h * 0.48f;
+        // ── 录音态 ──
+        // 音量缩放因子 0~1
+        float volScale = mVolume * 0.01f;
 
-        // 用 lineTo 画简单正弦波
-        mPath.reset();
-        float segW = lineW / SEGS;
+        // 最大波形幅度：拉到视图高度 80%
+        float maxAmp = h * 0.8f;
 
-        for (int i = 0; i <= SEGS; i++) {
-            float t = (float) i / SEGS;
-            float wave = (float) (
-                Math.sin(t * Math.PI * 6 + mPhase) * 0.5 +
-                Math.sin(t * Math.PI * 14 + mPhase * 1.3) * 0.3 +
-                Math.sin(t * Math.PI * 28 + mPhase * 0.7) * 0.2
-            ) * amp;
+        // 波动速度：每帧 0.04，舒缓波动
+        mPhase += 0.04f;
+        if (mPhase > 200f) mPhase = 0;
+        float offset = mPhase;
 
-            float x = pad + i * segW;
-            float y = cy - wave * maxH;
+        float segW = lineW / mSamplingSize;
 
-            if (i == 0) mPath.moveTo(x, y);
-            else        mPath.lineTo(x, y);
+        // 4 层参数：主线 1.0，其他线继续加大
+        float[] pathFuncs = {1.0f, 0.9f, -0.8f, -1.0f};
+        float[] layerWidths = {strokeW * 0.8f, strokeW * 0.6f, strokeW * 0.5f, strokeW * 0.4f};
+        int[] layerAlphas = {255, 220, 190, 150};
+        int[] layerColors = new int[4];
+        float[] hsv = new float[3];
+        Color.colorToHSV(mRecColor, hsv);
+        float baseBright = Math.max(0.5f, hsv[2]);
+        float baseSat = Math.max(0.3f, hsv[1]);
+        for (int i = 0; i < 4; i++) {
+            float bright = Math.min(1f, baseBright + 0.2f - i * 0.15f);
+            float sat = Math.max(0.15f, baseSat - i * 0.12f);
+            layerColors[i] = Color.HSVToColor(layerAlphas[i],
+                    new float[]{hsv[0], sat, Math.max(0.4f, bright)});
         }
 
-        // ── 波形线条 ──
-        mLinePaint.setShader(lineGrad);
-        mLinePaint.setStrokeWidth(strokeW);
-        c.drawPath(mPath, mLinePaint);
+        // 预计算波形值
+        float[] waveY = new float[mSamplingSize + 1];
+        for (int i = 0; i <= mSamplingSize; i++) {
+            float t = (float) i / mSamplingSize;
+            double mapX = (t - 0.5) * 4.0;
+            double sinVal = Math.sin(Math.PI * mapX - offset * Math.PI);
+            double rec = 4.0 / (4.0 + mapX * mapX * mapX * mapX);
+            waveY[i] = (float) (sinVal * rec * maxAmp);
+        }
 
-        // 持续刷新动画
+        Paint lp = new Paint(Paint.ANTI_ALIAS_FLAG);
+        lp.setStyle(Paint.Style.STROKE);
+        lp.setStrokeCap(Paint.Cap.ROUND);
+        lp.setStrokeJoin(Paint.Join.ROUND);
+
+        // 用 saveLayer + DST_IN 透明度遮罩实现边缘渐隐
+        // 先画所有路径到一个离屏缓冲，再用渐变遮罩裁剪两端 alpha
+        int fadeSave = c.saveLayer(0, 0, w, h, null);
+        for (int layer = 0; layer < 4; layer++) {
+            mPath.reset();
+            for (int i = 0; i <= mSamplingSize; i++) {
+                float x = pad + i * segW;
+                float y = cy + waveY[i] * pathFuncs[layer] * volScale;
+                if (i == 0) mPath.moveTo(x, y);
+                else        mPath.lineTo(x, y);
+            }
+            lp.setStrokeWidth(layerWidths[layer]);
+            lp.setColor(layerColors[layer]);
+            lp.setShader(null);
+            c.drawPath(mPath, lp);
+        }
+        // 透明度遮罩：两边 15% → 透明，中间 → 保持
+        Paint maskPaint = new Paint();
+        maskPaint.setXfermode(new android.graphics.PorterDuffXfermode(
+                android.graphics.PorterDuff.Mode.DST_IN));
+        LinearGradient maskGrad = new LinearGradient(
+                0, 0, w, 0,
+                new int[]{0x00000000, 0xFFFFFFFF, 0xFFFFFFFF, 0x00000000},
+                new float[]{0f, 0.15f, 0.85f, 1f},
+                Shader.TileMode.CLAMP
+        );
+        maskPaint.setShader(maskGrad);
+        c.drawRect(0, 0, w, h, maskPaint);
+        c.restoreToCount(fadeSave);
+
         postInvalidateOnAnimation();
+    }
+
+    /** WaveLineView 风格音量平滑追赶 */
+    private void softerChangeVolume() {
+        if (mVolume < mTargetVolume - mPerVolume) {
+            mVolume += mPerVolume;
+        } else if (mVolume > mTargetVolume + mPerVolume) {
+            mVolume = Math.max(mPerVolume * 2, mVolume - mPerVolume);
+        } else {
+            mVolume = mTargetVolume;
+        }
     }
 
     @Override

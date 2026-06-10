@@ -5,12 +5,10 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Outline;
 import android.graphics.Path;
-import android.graphics.Paint;
-import android.graphics.RectF;
+import android.os.Build;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
-import android.os.Build;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.TypedValue;
@@ -108,34 +106,6 @@ public class FrostedGlassHelper {
                         gt.setBounds(0, 0, w, h);
                         gt.draw(cnv);
                         cnv.restore();
-
-                        float borderPx = TypedValue.applyDimension(
-                                TypedValue.COMPLEX_UNIT_DIP, 1f,
-                                inputView.getResources().getDisplayMetrics());
-                        int borderColor;
-                        if (isDark) {
-                            borderColor = Color.argb(
-                                    Math.min(alpha / 3, 55),
-                                    Math.min(baseR + 55, 255),
-                                    Math.min(baseG + 55, 255),
-                                    Math.min(baseB + 80, 255));
-                        } else {
-                            borderColor = Color.argb(
-                                    Math.min(alpha / 3, 50),
-                                    255, 255, 255);
-                        }
-                        Paint bp = new Paint();
-                        bp.setStyle(Paint.Style.STROKE);
-                        bp.setStrokeWidth(borderPx);
-                        bp.setColor(borderColor);
-                        bp.setAntiAlias(true);
-                        float R = cr;
-                        float i = borderPx;
-                        cnv.drawLine(i + R, i, w - i - R, i, bp);
-                        cnv.drawArc(new RectF(i, i, i + R * 2, i + R * 2),
-                                270, -90, false, bp);
-                        cnv.drawArc(new RectF(w - i - R * 2, i, w - i, i + R * 2),
-                                270, 90, false, bp);
                     } else {
                         GradientDrawable gt = new GradientDrawable(
                                 GradientDrawable.Orientation.TOP_BOTTOM,
@@ -225,6 +195,8 @@ public class FrostedGlassHelper {
                 kvField.setAccessible(true);
                 View kv = (View) kvField.get(inputView);
                 applyOutline(kv, r);
+                // 渐变描边（前景叠加）——暗色亮色描边
+                addGradientBorder(kv, inputView, c);
             } catch (Exception ignored) {}
 
             try {
@@ -329,5 +301,48 @@ public class FrostedGlassHelper {
                 }
             }
         });
+    }
+
+    /** 键盘渐变描边 — View.setForeground + GlassBorderDrawable */
+    private static void addGradientBorder(View keyboardView, View inputView, MainHook.Config c) {
+        try {
+            boolean isDark = false;
+            try {
+                java.lang.reflect.Field themeField = inputView.getClass().getSuperclass()
+                        .getDeclaredField("theme");
+                themeField.setAccessible(true);
+                Object theme = themeField.get(inputView);
+                java.lang.reflect.Method isDarkM = theme.getClass().getMethod("isDark");
+                isDark = (Boolean) isDarkM.invoke(theme);
+            } catch (Exception ignored) {}
+
+            int borderTop, borderBottom;
+            float den = inputView.getResources().getDisplayMetrics().density;
+            float borderWidthPx;
+            if (isDark) {
+                // 暗色：白 0.7→TRANSPARENT→0.5，描边 0.5dp
+                borderTop = 0xB3FFFFFF;
+                borderBottom = 0x80FFFFFF;
+                borderWidthPx = 0.5f * den;
+            } else {
+                // 亮色：白 0.7→TRANSPARENT→0.6，描边 1dp
+                borderTop = 0xB3FFFFFF;
+                borderBottom = 0x99FFFFFF;
+                borderWidthPx = 1f * den;
+            }
+            float radius = TypedValue.applyDimension(
+                    TypedValue.COMPLEX_UNIT_DIP, c.corner,
+                    inputView.getResources().getDisplayMetrics());
+
+            GlassBorderDrawable gb = new GlassBorderDrawable(
+                    0, borderTop, borderBottom, radius, borderWidthPx, true);
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                keyboardView.setForeground(gb);
+                Log.i(TAG, "keyboard gradient border: dark=" + isDark);
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "gradient border failed: " + t);
+        }
     }
 }

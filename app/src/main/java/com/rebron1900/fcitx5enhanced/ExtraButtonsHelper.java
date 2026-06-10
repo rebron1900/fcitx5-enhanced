@@ -61,12 +61,14 @@ public class ExtraButtonsHelper {
 
             int keyFg = 0xFF888888;
             int accentBg = 0xFF07C160;
+            int keyBgColor = 0xFFF0F0F0;
             try {
                 Field tf = inputView.getClass().getSuperclass().getDeclaredField("theme");
                 tf.setAccessible(true);
                 Object theme = tf.get(inputView);
                 keyFg = (Integer) theme.getClass().getMethod("getAltKeyTextColor").invoke(theme);
                 accentBg = (Integer) theme.getClass().getMethod("getAccentKeyBackgroundColor").invoke(theme);
+                keyBgColor = (Integer) theme.getClass().getMethod("getKeyBackgroundColor").invoke(theme);
             } catch (Exception ignored) {}
             final int accentColor = accentBg;
 
@@ -280,10 +282,10 @@ public class ExtraButtonsHelper {
             int imeW_DP = 180;
 
             FrameLayout outer = new FrameLayout(ctx);
-            GradientDrawable outerBg = new GradientDrawable();
-            outerBg.setShape(GradientDrawable.RECTANGLE);
-            outerBg.setColor(bgColor); outerBg.setCornerRadius(corner);
-            outer.setBackground(outerBg);
+            int borderTop = fDark ? 0x55FFFFFF : 0x40FFFFFF;
+            int borderBottom = fDark ? 0x18FFFFFF : 0x10FFFFFF;
+            outer.setBackground(new GlassBorderDrawable(
+                    bgColor, borderTop, borderBottom, corner, 1.5f * den));
             outer.setClipToOutline(true);
             outer.setPadding(0, 0, 0, corner);
             outer.addView(layout, new FrameLayout.LayoutParams(
@@ -450,10 +452,10 @@ public class ExtraButtonsHelper {
                     ViewGroup.LayoutParams.WRAP_CONTENT));
 
             FrameLayout outer = new FrameLayout(ctx);
-            GradientDrawable outerBg = new GradientDrawable();
-            outerBg.setShape(GradientDrawable.RECTANGLE);
-            outerBg.setColor(bgColor); outerBg.setCornerRadius(corner);
-            outer.setBackground(outerBg);
+            int cbBorderTop = darkRef2[0] ? 0x55FFFFFF : 0x40FFFFFF;
+            int cbBorderBottom = darkRef2[0] ? 0x18FFFFFF : 0x10FFFFFF;
+            outer.setBackground(new GlassBorderDrawable(
+                    bgColor, cbBorderTop, cbBorderBottom, corner, 1.5f * den));
             outer.setClipToOutline(true);
             outer.setPadding(0, 0, 0, corner);
             outer.addView(sv, new FrameLayout.LayoutParams(
