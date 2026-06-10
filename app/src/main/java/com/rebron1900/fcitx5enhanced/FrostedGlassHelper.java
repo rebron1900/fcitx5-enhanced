@@ -1,0 +1,333 @@
+package com.rebron1900.fcitx5enhanced;
+
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Outline;
+import android.graphics.Path;
+import android.graphics.Paint;
+import android.graphics.RectF;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
+import android.util.DisplayMetrics;
+import android.util.Log;
+import android.util.TypedValue;
+import android.view.View;
+import android.view.ViewOutlineProvider;
+import android.view.Window;
+import android.widget.ImageView;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+
+/** 键盘毛玻璃 + 圆角裁剪。 */
+public class FrostedGlassHelper {
+    private static final String TAG = "Fcitx5Enh";
+
+    public static void apply(View inputView, MainHook.Config c) {
+        applyFrostedGlass(inputView, c);
+        applyRoundedCorners(inputView, c);
+    }
+
+    // ══════════════════════════════════════════
+    //  毛玻璃 — ViewRootImpl.createBackgroundBlurDrawable()
+    // ══════════════════════════════════════════
+    private static void applyFrostedGlass(View inputView, MainHook.Config c) {
+        try {
+            Field bgField = inputView.getClass().getDeclaredField("customBackground");
+            bgField.setAccessible(true);
+            ImageView bg = (ImageView) bgField.get(inputView);
+
+            // 读取当前主题判断 dark/light
+            boolean isDark = false;
+            try {
+                Field themeField = inputView.getClass().getSuperclass()
+                        .getDeclaredField("theme");
+                themeField.setAccessible(true);
+                Object theme = themeField.get(inputView);
+                Method isDarkM = theme.getClass().getMethod("isDark");
+                isDark = (Boolean) isDarkM.invoke(theme);
+            } catch (Exception ignored) {}
+
+            Object viewRootImpl = null;
+            try {
+                Method getVri = View.class.getMethod("getViewRootImpl");
+                viewRootImpl = getVri.invoke(inputView);
+            } catch (Exception ignored) {
+                viewRootImpl = inputView.getRootView().getParent();
+            }
+
+            if (viewRootImpl != null && c.blur > 0) {
+                Method createBlur = viewRootImpl.getClass()
+                        .getDeclaredMethod("createBackgroundBlurDrawable");
+                Object blurDrawable = createBlur.invoke(viewRootImpl);
+
+                if (blurDrawable != null) {
+                    blurDrawable.getClass().getMethod("setBlurRadius", Integer.TYPE)
+                            .invoke(blurDrawable, c.blur);
+                    blurDrawable.getClass().getMethod("setColor", Integer.TYPE)
+                            .invoke(blurDrawable, Color.TRANSPARENT);
+
+                    bg.setBackground((Drawable) blurDrawable);
+
+                    // tint 位图：四角填色遮 BlurDrawable 矩形模糊
+                    int alpha = c.alpha;
+                    int w = Math.max(1, bg.getWidth());
+                    int h = Math.max(1, bg.getHeight());
+                    Bitmap tint = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+                    Canvas cnv = new Canvas(tint);
+
+                    int topColor, bottomColor;
+                    int baseR, baseG, baseB;
+                    if (isDark) {
+                        baseR = 30; baseG = 35; baseB = 50;
+                        topColor = Color.argb(alpha, baseR, baseG, baseB);
+                        bottomColor = Color.argb(alpha, 20, 25, 40);
+                    } else {
+                        baseR = 245; baseG = 248; baseB = 255;
+                        topColor = Color.argb(alpha, baseR, baseG, baseB);
+                        bottomColor = Color.argb(alpha, 225, 230, 245);
+                    }
+
+                    cnv.drawColor(bottomColor);
+
+                    if (c.corner > 0) {
+                        float cr = TypedValue.applyDimension(
+                                TypedValue.COMPLEX_UNIT_DIP, c.corner,
+                                inputView.getResources().getDisplayMetrics());
+                        Path cornerPath = new Path();
+                        cornerPath.addRoundRect(0, 0, w, h, cr, cr, Path.Direction.CW);
+                        cnv.save();
+                        cnv.clipPath(cornerPath);
+                        GradientDrawable gt = new GradientDrawable(
+                                GradientDrawable.Orientation.TOP_BOTTOM,
+                                new int[]{topColor, bottomColor}
+                        );
+                        gt.setBounds(0, 0, w, h);
+                        gt.draw(cnv);
+                        cnv.restore();
+
+                        float borderPx = TypedValue.applyDimension(
+                                TypedValue.COMPLEX_UNIT_DIP, 1f,
+                                inputView.getResources().getDisplayMetrics());
+                        int borderColor;
+                        if (isDark) {
+                            borderColor = Color.argb(
+                                    Math.min(alpha / 3, 55),
+                                    Math.min(baseR + 55, 255),
+                                    Math.min(baseG + 55, 255),
+                                    Math.min(baseB + 80, 255));
+                        } else {
+                            borderColor = Color.argb(
+                                    Math.min(alpha / 3, 50),
+                                    255, 255, 255);
+                        }
+                        Paint bp = new Paint();
+                        bp.setStyle(Paint.Style.STROKE);
+                        bp.setStrokeWidth(borderPx);
+                        bp.setColor(borderColor);
+                        bp.setAntiAlias(true);
+                        float R = cr;
+                        float i = borderPx;
+                        cnv.drawLine(i + R, i, w - i - R, i, bp);
+                        cnv.drawArc(new RectF(i, i, i + R * 2, i + R * 2),
+                                270, -90, false, bp);
+                        cnv.drawArc(new RectF(w - i - R * 2, i, w - i, i + R * 2),
+                                270, 90, false, bp);
+                    } else {
+                        GradientDrawable gt = new GradientDrawable(
+                                GradientDrawable.Orientation.TOP_BOTTOM,
+                                new int[]{topColor, bottomColor}
+                        );
+                        gt.setBounds(0, 0, w, h);
+                        gt.draw(cnv);
+                    }
+                    bg.setImageBitmap(tint);
+                    bg.setScaleType(ImageView.ScaleType.FIT_XY);
+                    bg.setImageAlpha(255);
+
+                    Log.i(TAG, "✅ REAL blur=" + c.blur + " alpha=" + alpha + " dark=" + isDark);
+                } else {
+                    Log.w(TAG, "createBackgroundBlurDrawable returned null");
+                    fallback(bg, inputView, isDark, c);
+                }
+            } else {
+                Log.w(TAG, "viewRootImpl=" + viewRootImpl + " blur=" + c.blur);
+                fallback(bg, inputView, isDark, c);
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "frosted glass failed: " + t);
+        }
+    }
+
+    private static void fallback(ImageView bg, View inputView, boolean isDark, MainHook.Config c) {
+        try {
+            int alpha = c.alpha;
+            int w = inputView.getWidth();
+            int h = inputView.getHeight();
+            if (w <= 0 || h <= 0) {
+                DisplayMetrics dm = inputView.getResources().getDisplayMetrics();
+                w = dm.widthPixels;
+                h = (int) (dm.heightPixels * 0.4f);
+            }
+
+            Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+            Canvas cnv = new Canvas(out);
+
+            int c1, c2;
+            if (isDark) {
+                c1 = Color.argb(alpha, 30, 35, 50);
+                c2 = Color.argb(alpha, 20, 25, 40);
+            } else {
+                c1 = Color.argb(alpha, 245, 248, 255);
+                c2 = Color.argb(alpha, 225, 230, 245);
+            }
+
+            GradientDrawable base = new GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[]{c1, c2}
+            );
+            base.setBounds(0, 0, w, h);
+            base.draw(cnv);
+
+            bg.setImageBitmap(out);
+            bg.setImageAlpha(255);
+            bg.setBackground(null);
+        } catch (Exception ignored) {}
+    }
+
+    // ══════════════════════════════════════════
+    //  键盘圆角 — tint 位图填角 + keyboardView 裁剪
+    // ══════════════════════════════════════════
+
+    private static void applyRoundedCorners(View inputView, MainHook.Config c) {
+        try {
+            if (c.corner <= 0) return;
+
+            float r = TypedValue.applyDimension(
+                    TypedValue.COMPLEX_UNIT_DIP, c.corner,
+                    inputView.getResources().getDisplayMetrics());
+
+            makeWindowTransparent(inputView);
+
+            View decorView = inputView.getRootView();
+            decorView.setBackgroundColor(Color.TRANSPARENT);
+            decorView.setBackground(null);
+            decorView.setClipToOutline(false);
+            decorView.setOutlineProvider(null);
+
+            inputView.setBackgroundColor(Color.TRANSPARENT);
+
+            try {
+                Field kvField = inputView.getClass().getDeclaredField("keyboardView");
+                kvField.setAccessible(true);
+                View kv = (View) kvField.get(inputView);
+                applyOutline(kv, r);
+            } catch (Exception ignored) {}
+
+            try {
+                Field bgField = inputView.getClass().getDeclaredField("customBackground");
+                bgField.setAccessible(true);
+                View bgV = (View) bgField.get(inputView);
+                bgV.setClipToOutline(false);
+                bgV.setOutlineProvider(null);
+            } catch (Exception ignored) {}
+
+            Log.i(TAG, "corners: r=" + c.corner + "dp (tint-fill + kv clip)");
+        } catch (Throwable t) {
+            Log.w(TAG, "corners failed: " + t);
+        }
+    }
+
+    /** 多路径获取 IME 窗口并设背景透明 */
+    private static void makeWindowTransparent(View anyView) {
+        // 路径 D: ContextWrapper 链中找 getWindow()
+        try {
+            android.content.Context ctx = anyView.getContext();
+            while (ctx instanceof android.content.ContextWrapper) {
+                try {
+                    Method gw = ctx.getClass().getMethod("getWindow");
+                    Object winObj = gw.invoke(ctx);
+                    if (winObj instanceof Window) {
+                        Window w = (Window) winObj;
+                        w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+                        w.getDecorView().setBackgroundColor(Color.TRANSPARENT);
+                        Log.i(TAG, "✅ window transparent (D: getWindow)");
+                        return;
+                    }
+                } catch (NoSuchMethodException ignored) {}
+                ctx = ((android.content.ContextWrapper) ctx).getBaseContext();
+            }
+        } catch (Exception ignored) {}
+
+        try {
+            Object ctx = anyView.getContext();
+            Class<?> clz = ctx.getClass();
+            while (clz != null) {
+                try {
+                    java.lang.reflect.Method gw = clz.getDeclaredMethod("getWindow");
+                    gw.setAccessible(true);
+                    Object softInputWin = gw.invoke(ctx);
+                    if (softInputWin != null) {
+                        Method getWin = softInputWin.getClass().getMethod("getWindow");
+                        Window window = (Window) getWin.invoke(softInputWin);
+                        if (window != null) {
+                            window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+                            window.getDecorView().setBackgroundColor(Color.TRANSPARENT);
+                            Log.i(TAG, "✅ window transparent (A)");
+                            return;
+                        }
+                    }
+                } catch (NoSuchMethodException ignored) {}
+                clz = clz.getSuperclass();
+            }
+
+            // 路径 B: ViewRootImpl.mWindow
+            try {
+                View root = anyView.getRootView();
+                Object vri = root.getParent();
+                if (vri != null) {
+                    java.lang.reflect.Field f = vri.getClass().getDeclaredField("mWindow");
+                    f.setAccessible(true);
+                    Window w = (Window) f.get(vri);
+                    if (w != null) {
+                        w.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
+                        w.getDecorView().setBackgroundColor(Color.TRANSPARENT);
+                        Log.i(TAG, "✅ window transparent (B)");
+                        return;
+                    }
+                }
+            } catch (Exception ignored) {}
+
+            // 路径 C: 暴力设所有可见层透明
+            try {
+                View root = anyView.getRootView();
+                root.setBackgroundColor(Color.TRANSPARENT);
+                if (root.getParent() instanceof View) {
+                    ((View) root.getParent()).setBackgroundColor(Color.TRANSPARENT);
+                }
+                Log.i(TAG, "root transparent (C)");
+            } catch (Exception ignored) {}
+        } catch (Exception ignored) {}
+    }
+
+    private static void applyOutline(View v, float radius) {
+        v.setClipToOutline(true);
+        v.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline outline) {
+                int w = view.getWidth(), h = view.getHeight();
+                if (w <= 0 || h <= 0) return;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    Path path = new Path();
+                    path.addRoundRect(0, 0, w, h, radius, radius, Path.Direction.CW);
+                    outline.setConvexPath(path);
+                } else {
+                    outline.setRoundRect(0, 0, w, h, radius);
+                }
+            }
+        });
+    }
+}
