@@ -77,12 +77,12 @@ public class WaveformLineView extends View {
         invalidate();
     }
 
-    /** 从 AIDL 服务接收归一化振幅 0~1，内部放大到 0~100 */
+    /** 从 AIDL 服务接收归一化振幅 0~1 */
     public void setAmplitude(float a) {
         if (a < 0) a = 0;
         if (a > 1) a = 1;
-        // 放大到 0~100：小声音 200x 放大保证幅度；低于阈值则归零
-        int vol = Math.min(100, (int)(a * 200f));
+        // 120x 映射到 0~100
+        int vol = Math.min(100, (int)(a * 120f));
         if (vol < 3) vol = 0;
         mTargetVolume = vol;
         if (vol > 0 && !mRecording) {
@@ -132,14 +132,14 @@ public class WaveformLineView extends View {
         }
 
         // ── 录音态 ──
-        // 音量缩放因子 0~1
-        float volScale = mVolume * 0.01f;
+        // 音量→波幅映射（加倍，让正常说话也能大幅摆动，上限 1.0）
+        float volScale = Math.min(1.0f, mVolume * 0.02f);
 
-        // 最大波形幅度：拉到视图高度 80%
-        float maxAmp = h * 0.8f;
+        // 最大波形幅度：拉到视图高度 100%
+        float maxAmp = h * 1.0f;
 
         // 波动速度：每帧 0.04，舒缓波动
-        mPhase += 0.04f;
+        mPhase += 0.025f;
         if (mPhase > 200f) mPhase = 0;
         float offset = mPhase;
 
