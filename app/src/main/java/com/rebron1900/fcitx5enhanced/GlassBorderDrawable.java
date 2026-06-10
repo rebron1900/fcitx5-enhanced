@@ -54,20 +54,24 @@ public class GlassBorderDrawable extends Drawable {
     protected void onBoundsChange(Rect bounds) {
         super.onBoundsChange(bounds);
         mPath.reset();
-        float hw = mBorderWidth / 2f;
+        // 靠内描边：path 缩进整条描边宽度，保证 stroke 完全在 view 内部
+        float inset = mBorderWidth;
         mPath.addRoundRect(
-                bounds.left + hw, bounds.top + hw,
-                bounds.right - hw, bounds.bottom - hw,
+                bounds.left + inset, bounds.top + inset,
+                bounds.right - inset, bounds.bottom - inset,
                 mRadius, mRadius, Path.Direction.CW);
 
         if (mDiagonalGlow) {
             // === 上边缘整条高光（左上+右上玻璃描边） ===
-            // 顶部亮→中间透明→底部暗，高光覆盖整条上边
+            // 顶部亮→底部暗，高光覆盖整条上边
+            float height = bounds.bottom - bounds.top;
+            float extend = height * 0.25f;
+            float cx = (bounds.left + bounds.right) / 2f;
             mBorderPaint.setShader(new LinearGradient(
-                    0, bounds.top,
-                    0, bounds.bottom,
-                    new int[]{mTopBorderColor, 0x00000000, mBottomBorderColor},
-                    null,
+                    cx, bounds.top - extend,
+                    cx, bounds.bottom + extend,
+                    new int[]{mTopBorderColor, mTopBorderColor, mBottomBorderColor, mBottomBorderColor},
+                    new float[]{0f, 0.2f, 0.8f, 1f},
                     Shader.TileMode.CLAMP));
         } else {
             // === 弹窗模式：从上到下渐变 ===
