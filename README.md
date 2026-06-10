@@ -11,7 +11,13 @@
 
 </div>
 
-> 截图待补充
+> 磨砂玻璃效果 | 暗色键盘 | 快速面板
+
+<div align="center">
+  <img src="screenshots/screenshot-1.jpg" width="280" alt="Fcitx5 增强 - 键盘磨砂玻璃效果" />
+  <img src="screenshots/screenshot-2.jpg" width="280" alt="Fcitx5 增强 - 暗色键盘效果" />
+  <img src="screenshots/screenshot-3.jpg" width="280" alt="Fcitx5 增强 - 快速面板" />
+</div>
 
 ## 功能
 
