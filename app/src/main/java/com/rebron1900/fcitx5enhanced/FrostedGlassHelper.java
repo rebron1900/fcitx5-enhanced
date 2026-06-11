@@ -124,6 +124,15 @@ public class FrostedGlassHelper {
                         gt.setBounds(0, 0, w, h);
                         gt.draw(cnv);
                     }
+                    // 回收旧 Bitmap
+                    Drawable oldBg = bg.getDrawable();
+                    if (oldBg instanceof android.graphics.drawable.BitmapDrawable) {
+                        Bitmap oldBmp = ((android.graphics.drawable.BitmapDrawable) oldBg).getBitmap();
+                        if (oldBmp != null && !oldBmp.isRecycled()) {
+                            oldBmp.recycle();
+                        }
+                    }
+
                     bg.setImageBitmap(tint);
                     bg.setScaleType(ImageView.ScaleType.FIT_XY);
                     bg.setImageAlpha(255);
@@ -187,6 +196,15 @@ public class FrostedGlassHelper {
             );
             base.setBounds(0, 0, w, h);
             base.draw(cnv);
+
+            // 回收旧 Bitmap
+            Drawable oldBg = bg.getDrawable();
+            if (oldBg instanceof android.graphics.drawable.BitmapDrawable) {
+                Bitmap oldBmp = ((android.graphics.drawable.BitmapDrawable) oldBg).getBitmap();
+                if (oldBmp != null && !oldBmp.isRecycled()) {
+                    oldBmp.recycle();
+                }
+            }
 
             bg.setImageBitmap(out);
             bg.setImageAlpha(255);
