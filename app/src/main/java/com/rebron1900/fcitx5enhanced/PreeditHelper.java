@@ -17,6 +17,7 @@ import java.lang.reflect.Method;
  * 2. 宽度修正 — 用 post {} 延迟修改 WRAP_CONTENT，只在宽度确实不是 WRAP_CONTENT 时触发
  * 3. 位置修正 — 靠左约束 + leftMargin + bottomMargin
  * 4. listener 只在 width 确实需要修改时才 post requestLayout
+ * 5. 单手模式下跳过 layout fix，保留 fxliang 自己的 padding 对齐
  */
 public class PreeditHelper {
     private static final String TAG = "Fcitx5Enh";
@@ -90,6 +91,19 @@ public class PreeditHelper {
         }
     }
 
+    /**
+     * 检测是否处于单手模式。
+     * 单手模式下 fxliang 通过 setPadding 对齐 preedit，我们不应覆盖。
+     */
+    private static boolean isOneHandedMode(View inputView) {
+        try {
+            Field f = inputView.getClass().getDeclaredField("isOneHanded");
+            f.setAccessible(true);
+            return f.getBoolean(inputView);
+        } catch (Exception ignored) {}
+        return false;
+    }
+
     private static void fixLayout(View v, float leftMarginPx, float bottomMarginPx) {
         try {
             ViewGroup.LayoutParams lp = v.getLayoutParams();
@@ -97,6 +111,14 @@ public class PreeditHelper {
 
             // 二次检查：是否还需要修改
             if (lp.width == ViewGroup.LayoutParams.WRAP_CONTENT) return;
+
+            // 单手模式下跳过 layout fix，保留 fxliang 自己的 padding 对齐
+            // 只设置圆角背景，不改约束和 margin
+            View inputView = findInputView(v);
+            if (inputView != null && isOneHandedMode(inputView)) {
+                Log.d(TAG, "preedit skip fixLayout in one-hand mode");
+                return;
+            }
 
             lp.width = ViewGroup.LayoutParams.WRAP_CONTENT;
 
@@ -121,5 +143,21 @@ public class PreeditHelper {
         } catch (Exception e) {
             Log.w(TAG, "preedit fixLayout: " + e);
         }
+    }
+
+    /** 从 preeditRoot 向上找 InputView */
+    private static View findInputView(View v) {
+        View parent = v;
+        while (parent != null) {
+            if (parent.getClass().getName().contains("InputView")) {
+                return parent;
+            }
+            if (parent.getParent() instanceof View) {
+                parent = (View) parent.getParent();
+            } else {
+                break;
+            }
+        }
+        return null;
     }
 }
