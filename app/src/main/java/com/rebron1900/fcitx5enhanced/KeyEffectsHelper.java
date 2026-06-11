@@ -172,13 +172,14 @@ public class KeyEffectsHelper {
         }
     }
 
-    /** 从 actual drawable 链解析：边距（InsetDrawable/LayerDrawable）、圆角（GradientDrawable）、形状（oval/rect）。 */
+    /** 从 actual drawable 链解析：边距（InsetDrawable/LayerDrawable）、圆角（GradientDrawable）、形状（oval/pill/rect）。 */
     private static class KeyBgInfo {
         float radius;
         int hInset;
         int vInset;
         boolean isOval;
-        KeyBgInfo(float r, int h, int v, boolean oval) { radius = r; hInset = h; vInset = v; isOval = oval; }
+        boolean isPill;    // cornerRadius=Float.MAX_VALUE → Gboard 药丸（胶囊形）
+        KeyBgInfo(float r, int h, int v, boolean oval, boolean pill) { radius = r; hInset = h; vInset = v; isOval = oval; isPill = pill; }
     }
 
     /** 遍历 drawable 链（InsetDrawable → LayerDrawable → GradientDrawable），
@@ -187,6 +188,7 @@ public class KeyEffectsHelper {
         int hInset = 0, vInset = 0;
         float radius = 0f;
         boolean isOval = false;
+        boolean isPill = false;
 
         // 逐层剥离 wrapper drawable
         Drawable d = bg;
@@ -238,6 +240,12 @@ public class KeyEffectsHelper {
                         if (fr > 0) radius = fr;
                     } catch (Exception ignored) {}
                 }
+                // 药丸检测：cornerRadius >= 10000px → Float.MAX_VALUE 药丸（Gboard pill）
+                if (radius >= 10000f) {
+                    isPill = true;
+                    isOval = false;
+                    radius = 0f; // 由调用方从 keyView 尺寸计算
+                }
                 break; // 最内层，停止
             } else {
                 break;
@@ -257,7 +265,7 @@ public class KeyEffectsHelper {
             radius = Math.max(kr * den, 2f * den);
         }
 
-        return new KeyBgInfo(radius, hInset, vInset, isOval);
+        return new KeyBgInfo(radius, hInset, vInset, isOval, isPill);
     }
 
     /** 给单个按键套上 InsetDrawable + GlassBorderDrawable 作为 foreground，保留原有 press highlight。
@@ -312,15 +320,26 @@ public class KeyEffectsHelper {
             // 从实际 drawable 链解析圆角/形状/额外内边距
             KeyBgInfo info = parseKeyBg(keyView.getBackground(), keyView.getContext(), den);
 
+            // 药丸：用 keyView 实际尺寸计算有效圆角
+            if (info.isPill) {
+                info.radius = Math.min(keyView.getWidth(), keyView.getHeight()) * 0.5f;
+            }
+
             // 内边距取 KeyView 的 hMargin/vMargin（主题设置），drawable insets 作为兜底
             int useH = Math.max(hMargin, info.hInset);
             int useV = Math.max(vMargin, info.vInset);
 
             GlassBorderDrawable gb;
             if (info.isOval) {
+                // 椭圆按键描边加粗 1.8x，视觉上跟上其他键
                 gb = new GlassBorderDrawable(
-                        0, borderTop, borderBottom, info.radius, borderWidthPx,
+                        0, borderTop, borderBottom, info.radius, borderWidthPx * 1.8f,
                         GlassBorderDrawable.MODE_DIAGONAL, true);
+            } else if (info.isPill) {
+                // 药丸（胶囊形）描边加粗 1.8x，跟椭圆同理
+                gb = new GlassBorderDrawable(
+                        0, borderTop, borderBottom, info.radius, borderWidthPx * 1.8f,
+                        GlassBorderDrawable.MODE_DIAGONAL, false);
             } else {
                 gb = new GlassBorderDrawable(
                         0, borderTop, borderBottom, info.radius, borderWidthPx,
