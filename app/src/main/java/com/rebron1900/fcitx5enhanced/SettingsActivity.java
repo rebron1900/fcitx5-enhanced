@@ -19,9 +19,6 @@ public class SettingsActivity extends Activity {
     private SeekBar sbBlur, sbAlpha, sbCorner;
     private TextView tvBlur, tvAlpha, tvCorner;
     private Switch swVoice, swLeft, swRight, swKeyBorder;
-    private View colorKeyBorder, colorKbBorder;
-    private SeekBar sbKeyBorderWidth, sbKbBorderWidth;
-    private TextView tvKeyBorderWidth, tvKbBorderWidth;
     private boolean isDark;
 
     @Override
@@ -43,12 +40,6 @@ public class SettingsActivity extends Activity {
         swLeft = findViewById(R.id.sw_left_btn);
         swRight = findViewById(R.id.sw_right_btn);
         swKeyBorder = findViewById(R.id.sw_key_border);
-        colorKeyBorder = findViewById(R.id.color_key_border);
-        colorKbBorder = findViewById(R.id.color_kb_border);
-        sbKeyBorderWidth = findViewById(R.id.sb_key_border_width);
-        sbKbBorderWidth = findViewById(R.id.sb_kb_border_width);
-        tvKeyBorderWidth = findViewById(R.id.tv_key_border_width);
-        tvKbBorderWidth = findViewById(R.id.tv_kb_border_width);
 
         applyTheme();
 
@@ -59,10 +50,6 @@ public class SettingsActivity extends Activity {
                 if (sb == sbBlur) tvBlur.setText(progress == 0 ? "关" : progress + "");
                 else if (sb == sbAlpha) tvAlpha.setText((progress * 100) / 255 + "%");
                 else if (sb == sbCorner) tvCorner.setText(progress == 0 ? "关" : progress + "");
-                else if (sb == sbKeyBorderWidth)
-                    tvKeyBorderWidth.setText(String.format("%.1f", progress / 10f));
-                else if (sb == sbKbBorderWidth)
-                    tvKbBorderWidth.setText(String.format("%.1f", progress / 10f));
             }
             @Override public void onStartTrackingTouch(SeekBar sb) {}
             @Override public void onStopTrackingTouch(SeekBar sb) { saveAndApply(); }
@@ -71,8 +58,6 @@ public class SettingsActivity extends Activity {
         sbBlur.setOnSeekBarChangeListener(listener);
         sbAlpha.setOnSeekBarChangeListener(listener);
         sbCorner.setOnSeekBarChangeListener(listener);
-        sbKeyBorderWidth.setOnSeekBarChangeListener(listener);
-        sbKbBorderWidth.setOnSeekBarChangeListener(listener);
 
         View.OnClickListener switchListener = v -> saveAndApply();
         swVoice.setOnClickListener(switchListener);
@@ -80,38 +65,7 @@ public class SettingsActivity extends Activity {
         swRight.setOnClickListener(switchListener);
         swKeyBorder.setOnClickListener(switchListener);
 
-        // 颜色预览点击 → 弹出拾色器
-        colorKeyBorder.setOnClickListener(v -> pickColor(
-                "按键描边颜色", getBorderColor("key_border_color_dark", 0x22FFFFFF),
-                argb -> {
-                    setBorderColor("key_border_color_dark", "key_border_color_light", argb);
-                    colorKeyBorder.setBackgroundColor(argb);
-                    saveAndApply();
-                }));
-        colorKbBorder.setOnClickListener(v -> pickColor(
-                "键盘轮廓颜色", getBorderColor("kb_border_color_dark", 0x33FFFFFF),
-                argb -> {
-                    setBorderColor("kb_border_color_dark", "kb_border_color_light", argb);
-                    colorKbBorder.setBackgroundColor(argb);
-                    saveAndApply();
-                }));
-
         loadSettings();
-    }
-
-    private int getBorderColor(String key, int def) {
-        return getPreferences(MODE_PRIVATE).getInt(key, def);
-    }
-
-    private void setBorderColor(String keyDark, String keyLight, int argb) {
-        getPreferences(MODE_PRIVATE).edit()
-                .putInt(keyDark, argb)
-                .putInt(keyLight, argb)
-                .commit();
-    }
-
-    private void pickColor(String title, int initial, java.util.function.IntConsumer onResult) {
-        new ColorPickerDialog(this, initial, onResult).show();
     }
 
     private void applyTheme() {
@@ -147,7 +101,7 @@ public class SettingsActivity extends Activity {
                 int id = item.getId();
                 if (id == R.id.card_blur || id == R.id.card_alpha ||
                     id == R.id.card_corner || id == R.id.card_buttons ||
-                    id == R.id.card_key_border || id == R.id.card_kb_border) {
+                    id == R.id.card_key_border) {
                     styleCard((LinearLayout) item, cardBg, tp, ts, accent);
                 }
             } else if (item instanceof TextView) {
@@ -173,9 +127,7 @@ public class SettingsActivity extends Activity {
                         TextView tv = (TextView) v;
                         int id = tv.getId();
                         if (id == R.id.tv_blur_val || id == R.id.tv_alpha_val
-                                || id == R.id.tv_corner_val
-                                || id == R.id.tv_key_border_width
-                                || id == R.id.tv_kb_border_width) {
+                                || id == R.id.tv_corner_val) {
                             tv.setTextColor(accent);
                         } else {
                             tv.setTextColor(tp);
@@ -194,6 +146,7 @@ public class SettingsActivity extends Activity {
     //  持久化：本地 SP ← → 跨进程同步
     // ══════════════════════════════════════════
 
+    /** 页面打开时从本地 SP 恢复。 */
     private void loadSettings() {
         SharedPreferences sp = getPreferences(MODE_PRIVATE);
         sbBlur.setProgress(sp.getInt("blur_radius", 100));
@@ -203,12 +156,6 @@ public class SettingsActivity extends Activity {
         swLeft.setChecked(sp.getBoolean("show_left_button", true));
         swRight.setChecked(sp.getBoolean("show_right_button", true));
         swKeyBorder.setChecked(sp.getBoolean("key_border", true));
-        sbKeyBorderWidth.setProgress(sp.getInt("key_border_width", 8));
-        sbKbBorderWidth.setProgress(sp.getInt("kb_border_width", 10));
-        colorKeyBorder.setBackgroundColor(
-                sp.getInt("key_border_color_dark", 0x22FFFFFF));
-        colorKbBorder.setBackgroundColor(
-                sp.getInt("kb_border_color_dark", 0x33FFFFFF));
         updateLabels();
     }
 
@@ -216,17 +163,12 @@ public class SettingsActivity extends Activity {
         tvBlur.setText(sbBlur.getProgress() == 0 ? "关" : String.valueOf(sbBlur.getProgress()));
         tvAlpha.setText((sbAlpha.getProgress() * 100) / 255 + "%");
         tvCorner.setText(sbCorner.getProgress() == 0 ? "关" : String.valueOf(sbCorner.getProgress()));
-        tvKeyBorderWidth.setText(String.format("%.1f", sbKeyBorderWidth.getProgress() / 10f));
-        tvKbBorderWidth.setText(String.format("%.1f", sbKbBorderWidth.getProgress() / 10f));
     }
 
+    /** 用户操作 → 本地持久化 + 跨进程同步（ContentProvider + Broadcast 双通道）。 */
     private void saveAndApply() {
-        android.util.Log.i("Fcitx5Enh", "Settings saving");
-
-        float keyBw = sbKeyBorderWidth.getProgress() / 10f;
-        float kbBw = sbKbBorderWidth.getProgress() / 10f;
-        int keyCol = getBorderColor("key_border_color_dark", 0x22FFFFFF);
-        int kbCol = getBorderColor("kb_border_color_dark", 0x33FFFFFF);
+        android.util.Log.i("Fcitx5Enh", "Settings saving: L=" + swLeft.isChecked()
+                + " R=" + swRight.isChecked() + " V=" + swVoice.isChecked());
 
         // 1. 本地持久化
         getPreferences(MODE_PRIVATE).edit()
@@ -237,15 +179,9 @@ public class SettingsActivity extends Activity {
                 .putBoolean("show_left_button", swLeft.isChecked())
                 .putBoolean("show_right_button", swRight.isChecked())
                 .putBoolean("key_border", swKeyBorder.isChecked())
-                .putInt("key_border_color_dark", keyCol)
-                .putInt("key_border_color_light", keyCol)
-                .putInt("key_border_width", sbKeyBorderWidth.getProgress())
-                .putInt("kb_border_color_dark", kbCol)
-                .putInt("kb_border_color_light", kbCol)
-                .putInt("kb_border_width", sbKbBorderWidth.getProgress())
                 .commit();
 
-        // 2. ContentProvider
+        // 2. ContentProvider 跨进程同步（主通道，HyperOS 也不丢）
         try {
             android.content.ContentValues cv = new android.content.ContentValues();
             cv.put("show_left_button", swLeft.isChecked());
@@ -255,19 +191,13 @@ public class SettingsActivity extends Activity {
             cv.put("blur_radius", sbBlur.getProgress());
             cv.put("bg_alpha", sbAlpha.getProgress());
             cv.put("corner_radius", sbCorner.getProgress());
-            cv.put("key_border_color_dark", keyCol);
-            cv.put("key_border_color_light", keyCol);
-            cv.put("key_border_width", sbKeyBorderWidth.getProgress());
-            cv.put("kb_border_color_dark", kbCol);
-            cv.put("kb_border_color_light", kbCol);
-            cv.put("kb_border_width", sbKbBorderWidth.getProgress());
             android.net.Uri uri = android.net.Uri.parse("content://com.rebron1900.fcitx5enhanced.config");
             getContentResolver().update(uri, cv, null, null);
         } catch (Exception e) {
             android.util.Log.w("Fcitx5Enh", "ConfigProvider write failed: " + e);
         }
 
-        // 3. Broadcast
+        // 3. 广播（备选通道，进程间直达）
         android.content.Intent intent = new android.content.Intent("com.rebron1900.fcitx5enhanced.UI_UPDATE");
         intent.setFlags(Intent.FLAG_RECEIVER_FOREGROUND);
         intent.putExtra("show_left_button", swLeft.isChecked());
@@ -277,12 +207,6 @@ public class SettingsActivity extends Activity {
         intent.putExtra("blur_radius", sbBlur.getProgress());
         intent.putExtra("bg_alpha", sbAlpha.getProgress());
         intent.putExtra("corner_radius", sbCorner.getProgress());
-        intent.putExtra("key_border_color_dark", keyCol);
-        intent.putExtra("key_border_color_light", keyCol);
-        intent.putExtra("key_border_width", sbKeyBorderWidth.getProgress());
-        intent.putExtra("kb_border_color_dark", kbCol);
-        intent.putExtra("kb_border_color_light", kbCol);
-        intent.putExtra("kb_border_width", sbKbBorderWidth.getProgress());
         try { sendBroadcast(intent); } catch (Exception ignored) {}
     }
 }

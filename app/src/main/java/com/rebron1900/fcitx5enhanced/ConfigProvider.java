@@ -40,12 +40,6 @@ public class ConfigProvider extends ContentProvider {
             writeBool(ed, values, "show_right_button", true);
             writeBool(ed, values, "voice_enabled", true);
             writeBool(ed, values, "key_border", true);
-            writeInt(ed, values, "key_border_color_dark", 0x22FFFFFF);
-            writeInt(ed, values, "key_border_color_light", 0x66FFFFFF);
-            writeInt(ed, values, "key_border_width", 8);
-            writeInt(ed, values, "kb_border_color_dark", 0x33FFFFFF);
-            writeInt(ed, values, "kb_border_color_light", 0x99FFFFFF);
-            writeInt(ed, values, "kb_border_width", 10);
             writeInt(ed, values, "blur_radius", 100);
             writeInt(ed, values, "bg_alpha", 60);
             writeInt(ed, values, "corner_radius", 20);
@@ -68,22 +62,13 @@ public class ConfigProvider extends ContentProvider {
                     .getSharedPreferences(SP_NAME, android.content.Context.MODE_PRIVATE);
             MatrixCursor c = new MatrixCursor(new String[]{
                     "show_left_button", "show_right_button", "voice_enabled",
-                    "key_border", "key_border_color_dark", "key_border_color_light",
-                    "key_border_width",
-                    "kb_border_color_dark", "kb_border_color_light", "kb_border_width",
-                    "blur_radius", "bg_alpha", "corner_radius"
+                    "key_border", "blur_radius", "bg_alpha", "corner_radius"
             });
             c.addRow(new Object[]{
                     sp.getBoolean("show_left_button", true),
                     sp.getBoolean("show_right_button", true),
                     sp.getBoolean("voice_enabled", true),
                     sp.getBoolean("key_border", true),
-                    sp.getInt("key_border_color_dark", 0x22FFFFFF),
-                    sp.getInt("key_border_color_light", 0x66FFFFFF),
-                    sp.getInt("key_border_width", 8),
-                    sp.getInt("kb_border_color_dark", 0x33FFFFFF),
-                    sp.getInt("kb_border_color_light", 0x99FFFFFF),
-                    sp.getInt("kb_border_width", 10),
                     sp.getInt("blur_radius", 100),
                     sp.getInt("bg_alpha", 60),
                     sp.getInt("corner_radius", 20)
