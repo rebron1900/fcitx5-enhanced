@@ -219,23 +219,21 @@ public class KeyEffectsHelper {
         try {
             float den = keyView.getResources().getDisplayMetrics().density;
 
-            int borderTop, borderBottom;
+            int borderColor;
             float borderWidthPx;
             if (isDark) {
-                borderTop = 0x22FFFFFF;      // 暗色：极淡白
-                borderBottom = 0x22FFFFFF;
-                borderWidthPx = 0.8f * den;   // 0.8dp
+                borderColor = c.keyBorderColorDark;
+                borderWidthPx = c.keyBorderWidth * den;
             } else {
-                borderTop = 0x66FFFFFF;       // 亮色：半透白
-                borderBottom = 0x66FFFFFF;
-                borderWidthPx = 0.8f * den;
+                borderColor = c.keyBorderColorLight;
+                borderWidthPx = c.keyBorderWidth * den;
             }
 
             // 从 background LayerDrawable 解析 insets，圆角从主题配置读
             KeyBgInfo info = parseKeyBg(keyView.getBackground(), keyView.getContext(), den);
 
             GlassBorderDrawable gb = new GlassBorderDrawable(
-                    0, borderTop, borderBottom, info.radius, borderWidthPx,
+                    0, borderColor, borderColor, info.radius, borderWidthPx,
                     GlassBorderDrawable.MODE_DIAGONAL);
 
             Drawable glassFg;

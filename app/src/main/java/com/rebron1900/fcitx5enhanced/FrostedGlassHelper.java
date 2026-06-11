@@ -346,15 +346,13 @@ public class FrostedGlassHelper {
             float den = inputView.getResources().getDisplayMetrics().density;
             float borderWidthPx;
             if (isDark) {
-                // 暗色：白 0.20→TRANSPARENT→0.20，描边 1dp（进一步淡化）
-                borderTop = 0x33FFFFFF;
-                borderBottom = 0x33FFFFFF;
-                borderWidthPx = 1f * den;
+                borderTop = c.kbBorderColorDark;
+                borderBottom = c.kbBorderColorDark;
+                borderWidthPx = c.kbBorderWidth * den;
             } else {
-                // 亮色：白 0.6→TRANSPARENT→0.6，描边 1dp
-                borderTop = 0x99FFFFFF;
-                borderBottom = 0x99FFFFFF;
-                borderWidthPx = 1f * den;
+                borderTop = c.kbBorderColorLight;
+                borderBottom = c.kbBorderColorLight;
+                borderWidthPx = c.kbBorderWidth * den;
             }
             float radius = TypedValue.applyDimension(
                     TypedValue.COMPLEX_UNIT_DIP, c.corner,

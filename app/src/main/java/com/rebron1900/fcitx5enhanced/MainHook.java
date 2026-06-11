@@ -40,6 +40,12 @@ public class MainHook extends XposedModule {
         public boolean leftBtn = true;
         public boolean rightBtn = true;
         public boolean keyBorder = true;
+        public int keyBorderColorDark = 0x22FFFFFF;
+        public int keyBorderColorLight = 0x66FFFFFF;
+        public float keyBorderWidth = 0.8f;
+        public int kbBorderColorDark = 0x33FFFFFF;
+        public int kbBorderColorLight = 0x99FFFFFF;
+        public float kbBorderWidth = 1.0f;
     }
 
     private Config cfg = new Config();
@@ -100,6 +106,12 @@ public class MainHook extends XposedModule {
             cfg.leftBtn = sp.getBoolean("show_left_button", true);
             cfg.rightBtn = sp.getBoolean("show_right_button", true);
             cfg.keyBorder = sp.getBoolean("key_border", true);
+            cfg.keyBorderColorDark = sp.getInt("key_border_color_dark", 0x22FFFFFF);
+            cfg.keyBorderColorLight = sp.getInt("key_border_color_light", 0x66FFFFFF);
+            cfg.keyBorderWidth = sp.getFloat("key_border_width", 0.8f);
+            cfg.kbBorderColorDark = sp.getInt("kb_border_color_dark", 0x33FFFFFF);
+            cfg.kbBorderColorLight = sp.getInt("kb_border_color_light", 0x99FFFFFF);
+            cfg.kbBorderWidth = sp.getFloat("kb_border_width", 1.0f);
             Log.i(TAG, "read from fcitx5 SP: L=" + cfg.leftBtn + " R=" + cfg.rightBtn + " V=" + cfg.voice + " K=" + cfg.keyBorder);
         } catch (Throwable t) {
             Log.w(TAG, "readConfig SP failed: " + t);
@@ -221,7 +233,12 @@ public class MainHook extends XposedModule {
                         int bA = intent.getIntExtra("bg_alpha", 60);
                         int bC = intent.getIntExtra("corner_radius", 20);
                         boolean bK = intent.getBooleanExtra("key_border", true);
-                        Log.i(TAG, "BROADCAST payload: L=" + bL + " R=" + bR + " V=" + bV + " K=" + bK);
+                        int bKD = intent.getIntExtra("key_border_color_dark", 0x22FFFFFF);
+                        int bKL = intent.getIntExtra("key_border_color_light", 0x66FFFFFF);
+                        int bKW = intent.getIntExtra("key_border_width", 8);
+                        int bKBD = intent.getIntExtra("kb_border_color_dark", 0x33FFFFFF);
+                        int bKBL = intent.getIntExtra("kb_border_color_light", 0x99FFFFFF);
+                        int bKBW = intent.getIntExtra("kb_border_width", 10);
 
                         try {
                             SharedPreferences sp = context
@@ -234,6 +251,12 @@ public class MainHook extends XposedModule {
                                 .putInt("bg_alpha", bA)
                                 .putInt("corner_radius", bC)
                                 .putBoolean("key_border", bK)
+                                .putInt("key_border_color_dark", bKD)
+                                .putInt("key_border_color_light", bKL)
+                                .putInt("key_border_width", bKW)
+                                .putInt("kb_border_color_dark", bKBD)
+                                .putInt("kb_border_color_light", bKBL)
+                                .putInt("kb_border_width", bKBW)
                                 .commit();
                         } catch (Throwable t) {
                             Log.w(TAG, "save to fcitx5 SP failed: " + t);
@@ -241,6 +264,10 @@ public class MainHook extends XposedModule {
 
                         cfg.leftBtn = bL; cfg.rightBtn = bR; cfg.voice = bV;
                         cfg.blur = bB; cfg.alpha = bA; cfg.corner = bC; cfg.toolbar = bC; cfg.keyBorder = bK;
+                        cfg.keyBorderColorDark = bKD; cfg.keyBorderColorLight = bKL;
+                        cfg.keyBorderWidth = bKW / 10f;
+                        cfg.kbBorderColorDark = bKBD; cfg.kbBorderColorLight = bKBL;
+                        cfg.kbBorderWidth = bKBW / 10f;
                         View curView = mCurrentInputView;
                         if (curView != null) curView.post(() -> applyAllEffects(curView));
                     } else {
@@ -353,6 +380,12 @@ public class MainHook extends XposedModule {
                     cfg.alpha = c.getInt(c.getColumnIndexOrThrow("bg_alpha"));
                     cfg.corner = c.getInt(c.getColumnIndexOrThrow("corner_radius"));
                     cfg.toolbar = cfg.corner;
+                    cfg.keyBorderColorDark = c.getInt(c.getColumnIndexOrThrow("key_border_color_dark"));
+                    cfg.keyBorderColorLight = c.getInt(c.getColumnIndexOrThrow("key_border_color_light"));
+                    cfg.keyBorderWidth = c.getInt(c.getColumnIndexOrThrow("key_border_width")) / 10f;
+                    cfg.kbBorderColorDark = c.getInt(c.getColumnIndexOrThrow("kb_border_color_dark"));
+                    cfg.kbBorderColorLight = c.getInt(c.getColumnIndexOrThrow("kb_border_color_light"));
+                    cfg.kbBorderWidth = c.getInt(c.getColumnIndexOrThrow("kb_border_width")) / 10f;
                     Log.i(TAG, "reapply from provider: keyBorder=" + cfg.keyBorder);
                 } finally {
                     c.close();
