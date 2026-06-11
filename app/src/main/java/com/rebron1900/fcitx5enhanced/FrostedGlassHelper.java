@@ -38,8 +38,9 @@ public class FrostedGlassHelper {
             bgField.setAccessible(true);
             ImageView bg = (ImageView) bgField.get(inputView);
 
-            // 读取当前主题判断 dark/light
+            // 读取当前主题判断 dark/light + 获取按键底色
             boolean isDark = false;
+            int keyBgColor = 0;
             try {
                 Field themeField = inputView.getClass().getSuperclass()
                         .getDeclaredField("theme");
@@ -47,6 +48,8 @@ public class FrostedGlassHelper {
                 Object theme = themeField.get(inputView);
                 Method isDarkM = theme.getClass().getMethod("isDark");
                 isDark = (Boolean) isDarkM.invoke(theme);
+                Method getKeyBg = theme.getClass().getMethod("getKeyBackgroundColor");
+                keyBgColor = (Integer) getKeyBg.invoke(theme);
             } catch (Exception ignored) {}
 
             Object viewRootImpl = null;
@@ -78,14 +81,21 @@ public class FrostedGlassHelper {
                     Canvas cnv = new Canvas(tint);
 
                     int topColor, bottomColor;
-                    int baseR, baseG, baseB;
-                    if (isDark) {
-                        baseR = 30; baseG = 35; baseB = 50;
+                    if (keyBgColor != 0) {
+                        // 从主题按键底色推导渐变
+                        int baseR = Color.red(keyBgColor);
+                        int baseG = Color.green(keyBgColor);
+                        int baseB = Color.blue(keyBgColor);
                         topColor = Color.argb(alpha, baseR, baseG, baseB);
+                        bottomColor = Color.argb(Math.min(255, alpha + 20),
+                                Math.max(0, baseR - 15),
+                                Math.max(0, baseG - 15),
+                                Math.max(0, baseB - 15));
+                    } else if (isDark) {
+                        topColor = Color.argb(alpha, 30, 35, 50);
                         bottomColor = Color.argb(alpha, 20, 25, 40);
                     } else {
-                        baseR = 245; baseG = 248; baseB = 255;
-                        topColor = Color.argb(alpha, baseR, baseG, baseB);
+                        topColor = Color.argb(alpha, 245, 248, 255);
                         bottomColor = Color.argb(alpha, 225, 230, 245);
                     }
 
@@ -143,11 +153,27 @@ public class FrostedGlassHelper {
                 h = (int) (dm.heightPixels * 0.4f);
             }
 
+            // 尝试读主题按键底色
+            int keyBgColor = 0;
+            try {
+                Field themeField = inputView.getClass().getSuperclass()
+                        .getDeclaredField("theme");
+                themeField.setAccessible(true);
+                Object theme = themeField.get(inputView);
+                Method getKeyBg = theme.getClass().getMethod("getKeyBackgroundColor");
+                keyBgColor = (Integer) getKeyBg.invoke(theme);
+            } catch (Exception ignored) {}
+
             Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
             Canvas cnv = new Canvas(out);
 
             int c1, c2;
-            if (isDark) {
+            if (keyBgColor != 0) {
+                int br = Color.red(keyBgColor), bg_ = Color.green(keyBgColor), bb = Color.blue(keyBgColor);
+                c1 = Color.argb(alpha, br, bg_, bb);
+                c2 = Color.argb(Math.min(255, alpha + 20),
+                        Math.max(0, br - 15), Math.max(0, bg_ - 15), Math.max(0, bb - 15));
+            } else if (isDark) {
                 c1 = Color.argb(alpha, 30, 35, 50);
                 c2 = Color.argb(alpha, 20, 25, 40);
             } else {
