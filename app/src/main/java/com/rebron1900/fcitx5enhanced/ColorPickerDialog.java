@@ -6,32 +6,39 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
-import android.graphics.Path;
-import android.graphics.RectF;
 import android.graphics.Shader;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
-import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 /**
- * HSV 拾色器。
- * 左：二维色盘（横向=饱和度，纵向=明度），
- * 右：竖向 Hue 条 + Alpha 条，
- * 底：预览 + 取消/确定。
+ * HSV 拾色器 — 经典布局。
+ *
+ *  ┌──────────────────────┬──────────┬──────┐
+ *  │                      │  Hue 1   │ Alpha│
+ *  │   2D 色盘(饱和×明度)  │  (0-180) │      │
+ *  │                      ├──────────┤      │
+ *  │                      │  Hue 2   │      │
+ *  │                      │(180-360) │      │
+ *  ├──────────────────────┴──────────┴──────┤
+ *  │         ARGB: #FF454854                │
+ *  ├────────────────────────────────────────┤
+ *  │         [取消]           [确定]         │
+ *  └────────────────────────────────────────┘
  */
 public class ColorPickerDialog {
 
     private final Context mContext;
-    private float[] mHsv = new float[]{0, 1, 1};
+    private float[] mHsv = new float[]{220f / 360f, 0.7f, 0.7f};
     private int mAlpha = 255;
     private final java.util.function.IntConsumer mListener;
     private ColorFieldView mField;
-    private SliderView mHueSlider;
-    private SliderView mAlphaSlider;
+    private HueSliderView mHueSlider1, mHueSlider2;
+    private AlphaSliderView mAlphaSlider;
     private View mPreview;
+    private TextView mArgbText;
 
     public ColorPickerDialog(Context context, int initialColor, java.util.function.IntConsumer listener) {
         mContext = context;
@@ -48,118 +55,118 @@ public class ColorPickerDialog {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(pad, (int)(12*den), pad, pad);
 
-        // ── 色盘 + 右侧滑动条 ──
+        // ── 色盘 + 右侧条 ──
         LinearLayout pickerRow = new LinearLayout(mContext);
         pickerRow.setOrientation(LinearLayout.HORIZONTAL);
-        pickerRow.setGravity(Gravity.CENTER_VERTICAL);
-        int pickerSize = (int)(240 * den);
+
+        int fieldSize = (int)(220 * den);
+        int barW = (int)(28 * den);
+        int barH = fieldSize; // hue条占满高
+        int gap = (int)(4 * den);
 
         // 二维色盘
         mField = new ColorFieldView(mContext);
-        mField.setLayoutParams(new LinearLayout.LayoutParams(pickerSize, pickerSize));
+        mField.setLayoutParams(new LinearLayout.LayoutParams(fieldSize, fieldSize));
         mField.setHue(mHsv[0]);
         mField.setSV(mHsv[1], mHsv[2]);
         pickerRow.addView(mField);
 
-        // 右侧 Hue + 透明度 滑动条
-        LinearLayout sliderCol = new LinearLayout(mContext);
-        sliderCol.setOrientation(LinearLayout.VERTICAL);
-        int sliderW = (int)(36 * den);
-        int sliderH = (int)(pickerSize * 0.45f);
-        int gap = (int)(8 * den);
+        // 间隔
+        View spacer1 = new View(mContext);
+        spacer1.setLayoutParams(new LinearLayout.LayoutParams((int)(6*den), 0));
+        pickerRow.addView(spacer1);
 
-        // Hue 条
-        LinearLayout hueRow = new LinearLayout(mContext);
-        hueRow.setOrientation(LinearLayout.VERTICAL);
-        hueRow.setPadding((int)(8*den), 0, (int)(8*den), 0);
-        mHueSlider = new SliderView(mContext, true);
-        mHueSlider.setLayoutParams(new LinearLayout.LayoutParams(sliderW, sliderH));
-        mHueSlider.setColors(new int[]{
-            0xFFFF0000, 0xFFFFFF00, 0xFF00FF00,
-            0xFF00FFFF, 0xFF0000FF, 0xFFFF00FF, 0xFFFF0000
-        });
-        mHueSlider.setProgress(mHsv[0] / 360f);
-        mHueSlider.setOnProgressChange(p -> {
-            mHsv[0] = p * 360f;
-            mField.setHue(mHsv[0]);
-            mField.invalidate();
-            updatePreview();
-        });
-        hueRow.addView(mHueSlider);
-        TextView hueLabel = new TextView(mContext);
-        hueLabel.setText("H");
-        hueLabel.setTextSize(11);
-        hueLabel.setTextColor(0xFF888888);
-        hueLabel.setGravity(Gravity.CENTER);
-        hueLabel.setLayoutParams(new LinearLayout.LayoutParams(sliderW, (int)(20*den)));
-        hueRow.addView(hueLabel);
-        sliderCol.addView(hueRow);
+        // Hue 上段 (0-180°)
+        LinearLayout hueCol = new LinearLayout(mContext);
+        hueCol.setOrientation(LinearLayout.VERTICAL);
+        mHueSlider1 = new HueSliderView(mContext, 0, 180);
+        mHueSlider1.setLayoutParams(new LinearLayout.LayoutParams(barW, 0, 1));
+        mHueSlider1.setHue(mHsv[0]);
+        mHueSlider1.setOnHueChange(h -> { mHsv[0] = h; mField.setHue(h); mField.invalidate(); updateUi(); });
+        hueCol.addView(mHueSlider1);
+
+        // Hue 下段 (180-360°)
+        mHueSlider2 = new HueSliderView(mContext, 180, 360);
+        mHueSlider2.setLayoutParams(new LinearLayout.LayoutParams(barW, 0, 1));
+        mHueSlider2.setHue(mHsv[0]);
+        mHueSlider2.setOnHueChange(h -> { mHsv[0] = h; mField.setHue(h); mField.invalidate(); updateUi(); });
+        hueCol.addView(mHueSlider2);
+
+        pickerRow.addView(hueCol);
+
+        // 间隔
+        View spacer2 = new View(mContext);
+        spacer2.setLayoutParams(new LinearLayout.LayoutParams((int)(6*den), 0));
+        pickerRow.addView(spacer2);
 
         // Alpha 条
-        LinearLayout alphaRow = new LinearLayout(mContext);
-        alphaRow.setOrientation(LinearLayout.VERTICAL);
-        alphaRow.setPadding((int)(8*den), 0, (int)(8*den), 0);
-        mAlphaSlider = new SliderView(mContext, false);
-        mAlphaSlider.setLayoutParams(new LinearLayout.LayoutParams(sliderW, sliderH));
-        mAlphaSlider.setProgress(mAlpha / 255f);
-        mAlphaSlider.setOnProgressChange(p -> {
-            mAlpha = (int)(p * 255f);
-            updatePreview();
-        });
-        alphaRow.addView(mAlphaSlider);
-        TextView alphaLabel = new TextView(mContext);
-        alphaLabel.setText("A");
-        alphaLabel.setTextSize(11);
-        alphaLabel.setTextColor(0xFF888888);
-        alphaLabel.setGravity(Gravity.CENTER);
-        alphaLabel.setLayoutParams(new LinearLayout.LayoutParams(sliderW, (int)(20*den)));
-        alphaRow.addView(alphaLabel);
-        sliderCol.addView(alphaRow);
+        mAlphaSlider = new AlphaSliderView(mContext);
+        mAlphaSlider.setLayoutParams(new LinearLayout.LayoutParams(barW, fieldSize));
+        mAlphaSlider.setAlpha(mAlpha);
+        mAlphaSlider.setOnAlphaChange(a -> { mAlpha = a; updateUi(); });
+        pickerRow.addView(mAlphaSlider);
 
-        pickerRow.addView(sliderCol);
         root.addView(pickerRow);
+
+        // ── ARGB 文本 ──
+        mArgbText = new TextView(mContext);
+        mArgbText.setTextSize(14);
+        mArgbText.setTextColor(0xFF333333);
+        mArgbText.setGravity(Gravity.CENTER);
+        mArgbText.setPadding(0, (int)(8*den), 0, (int)(8*den));
+        root.addView(mArgbText);
 
         // ── 预览 ──
         mPreview = new View(mContext);
-        int preH = (int)(36 * den);
         mPreview.setLayoutParams(new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, preH));
-        updatePreview();
+                LinearLayout.LayoutParams.MATCH_PARENT, (int)(8*den)));
         root.addView(mPreview);
 
         // ── 按钮 ──
         LinearLayout btnRow = new LinearLayout(mContext);
         btnRow.setOrientation(LinearLayout.HORIZONTAL);
-        btnRow.setPadding(0, (int)(12*den), 0, 0);
+        btnRow.setPadding(0, (int)(10*den), 0, 0);
 
         TextView cancelBtn = new TextView(mContext);
         cancelBtn.setText("取消");
         cancelBtn.setTextSize(15);
-        cancelBtn.setTextColor(0xFF888888);
+        cancelBtn.setTextColor(0xFF666666);
         cancelBtn.setGravity(Gravity.CENTER);
-        cancelBtn.setBackgroundColor(0xFFF0F0F0);
-        cancelBtn.setPadding(0, (int)(10*den), 0, (int)(10*den));
-        cancelBtn.setLayoutParams(new LinearLayout.LayoutParams(
-                0, (int)(44*den), 1));
-        cancelBtn.setOnClickListener(v -> {}); // dismisses dialog
+        cancelBtn.setBackgroundColor(0xFFF5F5F5);
+        int btnR = (int)(8*den);
+        android.graphics.drawable.GradientDrawable cancelBg = new android.graphics.drawable.GradientDrawable();
+        cancelBg.setCornerRadius(btnR);
+        cancelBg.setColor(0xFFF5F5F5);
+        cancelBtn.setBackground(cancelBg);
+        cancelBtn.setPadding(0, (int)(12*den), 0, (int)(12*den));
+        cancelBtn.setLayoutParams(new LinearLayout.LayoutParams(0, (int)(46*den), 1));
+        cancelBtn.setOnClickListener(v -> {}); // dismiss
+
+        View btnSpacer = new View(mContext);
+        btnSpacer.setLayoutParams(new LinearLayout.LayoutParams((int)(12*den), 0));
 
         TextView okBtn = new TextView(mContext);
         okBtn.setText("确定");
         okBtn.setTextSize(15);
         okBtn.setTextColor(0xFFFFFFFF);
         okBtn.setGravity(Gravity.CENTER);
-        okBtn.setBackgroundColor(0xFF07C160);
-        okBtn.setPadding(0, (int)(10*den), 0, (int)(10*den));
-        okBtn.setLayoutParams(new LinearLayout.LayoutParams(
-                0, (int)(44*den), 1));
+        android.graphics.drawable.GradientDrawable okBg = new android.graphics.drawable.GradientDrawable();
+        okBg.setCornerRadius(btnR);
+        okBg.setColor(0xFF07C160);
+        okBtn.setBackground(okBg);
+        okBtn.setPadding(0, (int)(12*den), 0, (int)(12*den));
+        okBtn.setLayoutParams(new LinearLayout.LayoutParams(0, (int)(46*den), 1));
         okBtn.setOnClickListener(v -> {
             if (mListener != null)
                 mListener.accept(Color.HSVToColor(mAlpha, mHsv));
         });
 
         btnRow.addView(cancelBtn);
+        btnRow.addView(btnSpacer);
         btnRow.addView(okBtn);
         root.addView(btnRow);
+
+        updateUi();
 
         new AlertDialog.Builder(mContext)
                 .setTitle("选择颜色")
@@ -169,18 +176,19 @@ public class ColorPickerDialog {
                 .show();
     }
 
-    private void updatePreview() {
-        if (mPreview != null)
-            mPreview.setBackgroundColor(Color.HSVToColor(mAlpha, mHsv));
+    private void updateUi() {
+        int color = Color.HSVToColor(mAlpha, mHsv);
+        if (mPreview != null) mPreview.setBackgroundColor(color);
+        if (mArgbText != null) mArgbText.setText(String.format("ARGB: #%08X", color));
     }
 
     // ══════════════════════════════════════════
-    //  二维色盘
+    //  二维色盘：X=饱和度, Y=明度
     // ══════════════════════════════════════════
 
     private static class ColorFieldView extends View {
         private float mHue;
-        private float mSat = 1, mVal = 1;
+        private float mSat = 0.7f, mVal = 0.7f;
         private final Paint mDotPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
         ColorFieldView(Context ctx) {
@@ -195,42 +203,36 @@ public class ColorPickerDialog {
         protected void onDraw(Canvas c) {
             int w = getWidth(), h = getHeight();
             if (w <= 0 || h <= 0) return;
-
-            // 从左(白)到右(纯色)，从上(白)到下(黑)
             int pure = Color.HSVToColor(255, new float[]{mHue, 1f, 1f});
-            Paint p = new Paint();
 
-            // Pass 1: 底部黑色渐变
+            Paint p = new Paint();
+            // 黑→白 纵向渐变
             p.setShader(new LinearGradient(0, 0, 0, h,
                     Color.WHITE, Color.BLACK, Shader.TileMode.CLAMP));
             c.drawRect(0, 0, w, h, p);
-
-            // Pass 2: 从左(白)到右(纯色)渐变，叠加 DST_IN 用混合模式
-            // 更简单：先画从左到右渐变，再用从下到上的渐变剪裁
+            // 白→纯色 横向渐变
             p.setShader(new LinearGradient(0, 0, w, 0,
                     Color.WHITE, pure, Shader.TileMode.CLAMP));
             c.drawRect(0, 0, w, h, p);
 
-            // 当前选中点
-            float dotX = mSat * w;
-            float dotY = (1f - mVal) * h;
+            // 选中点
+            float dx = mSat * w;
+            float dy = (1f - mVal) * h;
             mDotPaint.setColor(0xFFFFFFFF);
-            c.drawCircle(dotX, dotY, 7, mDotPaint);
+            c.drawCircle(dx, dy, 7, mDotPaint);
             mDotPaint.setStyle(Paint.Style.STROKE);
             mDotPaint.setStrokeWidth(2);
             mDotPaint.setColor(0xFF000000);
-            c.drawCircle(dotX, dotY, 7, mDotPaint);
+            c.drawCircle(dx, dy, 7, mDotPaint);
             mDotPaint.setStyle(Paint.Style.FILL);
         }
 
         @Override
         public boolean onTouchEvent(MotionEvent e) {
-            if (e.getAction() == MotionEvent.ACTION_DOWN
-                    || e.getAction() == MotionEvent.ACTION_MOVE) {
-                float x = Math.max(0, Math.min(getWidth(), e.getX()));
-                float y = Math.max(0, Math.min(getHeight(), e.getY()));
-                mSat = x / getWidth();
-                mVal = 1f - y / getHeight();
+            int act = e.getAction();
+            if (act == MotionEvent.ACTION_DOWN || act == MotionEvent.ACTION_MOVE) {
+                mSat = Math.max(0, Math.min(1, e.getX() / getWidth()));
+                mVal = Math.max(0, Math.min(1, 1f - e.getY() / getHeight()));
                 invalidate();
                 return true;
             }
@@ -239,84 +241,130 @@ public class ColorPickerDialog {
     }
 
     // ══════════════════════════════════════════
-    //  竖向滑动条
+    //  Hue 滑块
     // ══════════════════════════════════════════
 
-    private static class SliderView extends View {
-        private boolean mIsHue;
-        private float mProgress = 0.5f;
-        private java.util.function.Consumer<Float> mListener;
+    private static class HueSliderView extends View {
+        private final int mStartDeg, mEndDeg;
+        private float mHue;
         private final Paint mPointerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private int[] mColors;
+        private java.util.function.Consumer<Float> mListener;
 
-        SliderView(Context ctx, boolean isHue) {
+        HueSliderView(Context ctx, int startDeg, int endDeg) {
             super(ctx);
-            mIsHue = isHue;
-            mPointerPaint.setStyle(Paint.Style.FILL);
-            mPointerPaint.setColor(0xFFFFFFFF);
+            mStartDeg = startDeg;
+            mEndDeg = endDeg;
         }
 
-        void setColors(int[] colors) { mColors = colors; }
-        void setProgress(float p) { mProgress = Math.max(0, Math.min(1, p)); invalidate(); }
-        void setOnProgressChange(java.util.function.Consumer<Float> l) { mListener = l; }
+        void setHue(float h) { mHue = h; invalidate(); }
+        void setOnHueChange(java.util.function.Consumer<Float> l) { mListener = l; }
+
+        @Override
+        protected void onDraw(Canvas c) {
+            int w = getWidth(), h = getHeight();
+            if (w <= 0 || h <= 0) return;
+            Paint p = new Paint();
+
+            // hue 渐变
+            int steps = 30;
+            float stepH = (float) h / steps;
+            for (int i = 0; i < steps; i++) {
+                float frac1 = (float) i / steps;
+                float frac2 = (float) (i + 1) / steps;
+                int deg1 = mStartDeg + (int)((mEndDeg - mStartDeg) * frac1);
+                int deg2 = mStartDeg + (int)((mEndDeg - mStartDeg) * frac2);
+                int c1 = Color.HSVToColor(255, new float[]{deg1, 1f, 1f});
+                int c2 = Color.HSVToColor(255, new float[]{deg2, 1f, 1f});
+                p.setShader(new LinearGradient(0, i * stepH, 0, (i + 1) * stepH,
+                        c1, c2, Shader.TileMode.CLAMP));
+                c.drawRect(0, i * stepH, w, (i + 1) * stepH, p);
+            }
+
+            // 指针
+            float pos = (mHue - mStartDeg) / (mEndDeg - mStartDeg) * h;
+            pos = Math.max(0, Math.min(h, pos));
+            mPointerPaint.setColor(0xFFFFFFFF);
+            mPointerPaint.setShadowLayer(4, 0, 0, 0x80000000);
+            c.drawCircle(w / 2f, pos, 9, mPointerPaint);
+            mPointerPaint.setShadowLayer(0, 0, 0, 0);
+            mPointerPaint.setStyle(Paint.Style.STROKE);
+            mPointerPaint.setStrokeWidth(2);
+            mPointerPaint.setColor(0xFF333333);
+            c.drawCircle(w / 2f, pos, 9, mPointerPaint);
+            mPointerPaint.setStyle(Paint.Style.FILL);
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent e) {
+            int act = e.getAction();
+            if (act == MotionEvent.ACTION_DOWN || act == MotionEvent.ACTION_MOVE) {
+                float fracy = Math.max(0, Math.min(1, e.getY() / getHeight()));
+                mHue = mStartDeg + (mEndDeg - mStartDeg) * fracy;
+                invalidate();
+                if (mListener != null) mListener.accept(mHue);
+                return true;
+            }
+            return false;
+        }
+    }
+
+    // ══════════════════════════════════════════
+    //  Alpha 滑块
+    // ══════════════════════════════════════════
+
+    private static class AlphaSliderView extends View {
+        private int mAlpha = 255;
+        private final Paint mPointerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private java.util.function.Consumer<Integer> mListener;
+
+        AlphaSliderView(Context ctx) { super(ctx); }
+
+        void setAlpha(int a) { mAlpha = a; invalidate(); }
+        void setOnAlphaChange(java.util.function.Consumer<Integer> l) { mListener = l; }
 
         @Override
         protected void onDraw(Canvas c) {
             int w = getWidth(), h = getHeight();
             if (w <= 0 || h <= 0) return;
 
-            if (mIsHue && mColors != null) {
-                // Hue 渐变条
-                Paint p = new Paint();
-                float[] positions = new float[mColors.length];
-                for (int i = 0; i < mColors.length; i++)
-                    positions[i] = (float) i / (mColors.length - 1);
-                p.setShader(new LinearGradient(0, 0, 0, h,
-                        mColors, positions, Shader.TileMode.CLAMP));
-                c.drawRoundRect(4, 0, w - 4, h, 4, 4, p);
-            } else {
-                // Alpha 渐变条：底色从透明到不透明
-                Paint p = new Paint();
-                p.setShader(new LinearGradient(0, 0, 0, h,
-                        Color.TRANSPARENT, Color.WHITE, Shader.TileMode.CLAMP));
-                c.drawRoundRect(4, 0, w - 4, h, 4, 4, p);
-                // 棋盘底纹示意透明
-                Paint checkP = new Paint();
-                int cell = (int)(8 * getResources().getDisplayMetrics().density);
-                for (int row = 0; row < h; row += cell) {
-                    for (int col = 0; col < w; col += cell) {
-                        int cx = col + 4;
-                        if (((row / cell) + (col / cell)) % 2 == 0)
-                            checkP.setColor(0xFFCCCCCC);
-                        else
-                            checkP.setColor(0xFFFFFFFF);
-                        c.drawRect(cx, row, Math.min(cx + cell, w - 4), Math.min(row + cell, h), checkP);
-                    }
+            // 棋盘底纹
+            Paint checkP = new Paint();
+            int cell = (int)(10 * getResources().getDisplayMetrics().density);
+            for (int row = 0; row < h; row += cell) {
+                for (int col = 0; col < w; col += cell) {
+                    checkP.setColor((((row / cell) + (col / cell)) % 2 == 0)
+                            ? 0xFFCCCCCC : 0xFFFFFFFF);
+                    c.drawRect(col, row, Math.min(col + cell, w), Math.min(row + cell, h), checkP);
                 }
-                // 再蒙一层渐变
-                c.drawRoundRect(4, 0, w - 4, h, 4, 4, p);
             }
 
+            // 黑白渐变蒙层
+            Paint p = new Paint();
+            p.setShader(new LinearGradient(0, 0, 0, h,
+                    Color.TRANSPARENT, Color.BLACK, Shader.TileMode.CLAMP));
+            c.drawRect(0, 0, w, h, p);
+
             // 指针
-            float py = mProgress * h;
+            float pos = (1f - mAlpha / 255f) * h;
+            mPointerPaint.setColor(0xFFFFFFFF);
             mPointerPaint.setShadowLayer(4, 0, 0, 0x80000000);
-            c.drawCircle(w / 2f, py, 10, mPointerPaint);
+            c.drawCircle(w / 2f, pos, 9, mPointerPaint);
             mPointerPaint.setShadowLayer(0, 0, 0, 0);
             mPointerPaint.setStyle(Paint.Style.STROKE);
             mPointerPaint.setStrokeWidth(2);
             mPointerPaint.setColor(0xFF333333);
-            c.drawCircle(w / 2f, py, 10, mPointerPaint);
+            c.drawCircle(w / 2f, pos, 9, mPointerPaint);
             mPointerPaint.setStyle(Paint.Style.FILL);
         }
 
         @Override
         public boolean onTouchEvent(MotionEvent e) {
-            if (e.getAction() == MotionEvent.ACTION_DOWN
-                    || e.getAction() == MotionEvent.ACTION_MOVE) {
-                float p = Math.max(0, Math.min(1, e.getY() / getHeight()));
-                mProgress = p;
+            int act = e.getAction();
+            if (act == MotionEvent.ACTION_DOWN || act == MotionEvent.ACTION_MOVE) {
+                float fracy = Math.max(0, Math.min(1, e.getY() / getHeight()));
+                mAlpha = Math.max(0, Math.min(255, Math.round((1f - fracy) * 255f)));
                 invalidate();
-                if (mListener != null) mListener.accept(p);
+                if (mListener != null) mListener.accept(mAlpha);
                 return true;
             }
             return false;
