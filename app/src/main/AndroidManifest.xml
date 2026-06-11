@@ -28,5 +28,10 @@
             </intent-filter>
         </activity>
 
+        <provider
+            android:name=".ConfigProvider"
+            android:authorities="com.rebron1900.fcitx5enhanced.config"
+            android:exported="true" />
+
     </application>
 </manifest>

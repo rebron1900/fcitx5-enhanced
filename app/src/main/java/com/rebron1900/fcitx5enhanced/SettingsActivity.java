@@ -1,6 +1,8 @@
 package com.rebron1900.fcitx5enhanced;
 
 import android.app.Activity;
+import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -12,18 +14,11 @@ import android.widget.SeekBar;
 import android.widget.Switch;
 import android.widget.TextView;
 
-import org.json.JSONObject;
-
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
-
 public class SettingsActivity extends Activity {
 
     private SeekBar sbBlur, sbAlpha, sbCorner;
     private TextView tvBlur, tvAlpha, tvCorner;
-    private Switch swVoice, swLeft, swRight;
+    private Switch swVoice, swLeft, swRight, swKeyBorder;
     private boolean isDark;
 
     @Override
@@ -44,6 +39,7 @@ public class SettingsActivity extends Activity {
         swVoice = findViewById(R.id.sw_voice);
         swLeft = findViewById(R.id.sw_left_btn);
         swRight = findViewById(R.id.sw_right_btn);
+        swKeyBorder = findViewById(R.id.sw_key_border);
 
         applyTheme();
 
@@ -63,11 +59,11 @@ public class SettingsActivity extends Activity {
         sbAlpha.setOnSeekBarChangeListener(listener);
         sbCorner.setOnSeekBarChangeListener(listener);
 
-        // Switch listeners
         View.OnClickListener switchListener = v -> saveAndApply();
         swVoice.setOnClickListener(switchListener);
         swLeft.setOnClickListener(switchListener);
         swRight.setOnClickListener(switchListener);
+        swKeyBorder.setOnClickListener(switchListener);
 
         loadSettings();
     }
@@ -104,7 +100,8 @@ public class SettingsActivity extends Activity {
             if (item instanceof LinearLayout && item.getId() != android.R.id.content) {
                 int id = item.getId();
                 if (id == R.id.card_blur || id == R.id.card_alpha ||
-                    id == R.id.card_corner || id == R.id.card_buttons) {
+                    id == R.id.card_corner || id == R.id.card_buttons ||
+                    id == R.id.card_key_border) {
                     styleCard((LinearLayout) item, cardBg, tp, ts, accent);
                 }
             } else if (item instanceof TextView) {
@@ -145,30 +142,20 @@ public class SettingsActivity extends Activity {
 
     private float dp(int dp) { return dp * getResources().getDisplayMetrics().density; }
 
-    private JSONObject readConfigFile() {
-        JSONObject json = new JSONObject();
-        try {
-            File f = new File(getFilesDir(), "enhanced_config.json");
-            if (f.exists()) {
-                BufferedReader br = new BufferedReader(new FileReader(f));
-                StringBuilder sb = new StringBuilder();
-                String line;
-                while ((line = br.readLine()) != null) sb.append(line);
-                br.close();
-                json = new JSONObject(sb.toString());
-            }
-        } catch (Exception ignored) {}
-        return json;
-    }
+    // ══════════════════════════════════════════
+    //  持久化：本地 SP ← → 跨进程同步
+    // ══════════════════════════════════════════
 
+    /** 页面打开时从本地 SP 恢复。 */
     private void loadSettings() {
-        JSONObject json = readConfigFile();
-        sbBlur.setProgress(json.optInt("blur_radius", 100));
-        sbAlpha.setProgress(json.optInt("bg_alpha", 60));
-        sbCorner.setProgress(json.optInt("corner_radius", 20));
-        swVoice.setChecked(json.optBoolean("voice_enabled", true));
-        swLeft.setChecked(json.optBoolean("show_left_button", true));
-        swRight.setChecked(json.optBoolean("show_right_button", true));
+        SharedPreferences sp = getPreferences(MODE_PRIVATE);
+        sbBlur.setProgress(sp.getInt("blur_radius", 100));
+        sbAlpha.setProgress(sp.getInt("bg_alpha", 60));
+        sbCorner.setProgress(sp.getInt("corner_radius", 20));
+        swVoice.setChecked(sp.getBoolean("voice_enabled", true));
+        swLeft.setChecked(sp.getBoolean("show_left_button", true));
+        swRight.setChecked(sp.getBoolean("show_right_button", true));
+        swKeyBorder.setChecked(sp.getBoolean("key_border", true));
         updateLabels();
     }
 
@@ -178,41 +165,48 @@ public class SettingsActivity extends Activity {
         tvCorner.setText(sbCorner.getProgress() == 0 ? "关" : String.valueOf(sbCorner.getProgress()));
     }
 
+    /** 用户操作 → 本地持久化 + 跨进程同步（ContentProvider + Broadcast 双通道）。 */
     private void saveAndApply() {
-        android.util.Log.i("Fcitx5Enh", "Settings saving: L=" + swLeft.isChecked() + " R=" + swRight.isChecked() + " V=" + swVoice.isChecked());
+        android.util.Log.i("Fcitx5Enh", "Settings saving: L=" + swLeft.isChecked()
+                + " R=" + swRight.isChecked() + " V=" + swVoice.isChecked());
 
-        // 直接写文件（不再经过 ContentProvider）
-        saveToFile();
+        // 1. 本地持久化
+        getPreferences(MODE_PRIVATE).edit()
+                .putInt("blur_radius", sbBlur.getProgress())
+                .putInt("bg_alpha", sbAlpha.getProgress())
+                .putInt("corner_radius", sbCorner.getProgress())
+                .putBoolean("voice_enabled", swVoice.isChecked())
+                .putBoolean("show_left_button", swLeft.isChecked())
+                .putBoolean("show_right_button", swRight.isChecked())
+                .putBoolean("key_border", swKeyBorder.isChecked())
+                .commit();
 
-        // 发送广播通知 fcitx5 进程应用配置
+        // 2. ContentProvider 跨进程同步（主通道，HyperOS 也不丢）
+        try {
+            android.content.ContentValues cv = new android.content.ContentValues();
+            cv.put("show_left_button", swLeft.isChecked());
+            cv.put("show_right_button", swRight.isChecked());
+            cv.put("voice_enabled", swVoice.isChecked());
+            cv.put("key_border", swKeyBorder.isChecked());
+            cv.put("blur_radius", sbBlur.getProgress());
+            cv.put("bg_alpha", sbAlpha.getProgress());
+            cv.put("corner_radius", sbCorner.getProgress());
+            android.net.Uri uri = android.net.Uri.parse("content://com.rebron1900.fcitx5enhanced.config");
+            getContentResolver().update(uri, cv, null, null);
+        } catch (Exception e) {
+            android.util.Log.w("Fcitx5Enh", "ConfigProvider write failed: " + e);
+        }
+
+        // 3. 广播（备选通道，进程间直达）
         android.content.Intent intent = new android.content.Intent("com.rebron1900.fcitx5enhanced.UI_UPDATE");
-        // 广播携带配置值，供 MainHook 直接验真（不依赖文件）
+        intent.setFlags(Intent.FLAG_RECEIVER_FOREGROUND);
         intent.putExtra("show_left_button", swLeft.isChecked());
         intent.putExtra("show_right_button", swRight.isChecked());
         intent.putExtra("voice_enabled", swVoice.isChecked());
+        intent.putExtra("key_border", swKeyBorder.isChecked());
         intent.putExtra("blur_radius", sbBlur.getProgress());
         intent.putExtra("bg_alpha", sbAlpha.getProgress());
         intent.putExtra("corner_radius", sbCorner.getProgress());
         try { sendBroadcast(intent); } catch (Exception ignored) {}
     }
-
-    private void saveToFile() {
-        try {
-            org.json.JSONObject json = new org.json.JSONObject();
-            json.put("blur_radius", sbBlur.getProgress());
-            json.put("bg_alpha", sbAlpha.getProgress());
-            json.put("corner_radius", sbCorner.getProgress());
-            json.put("voice_enabled", swVoice.isChecked());
-            json.put("show_left_button", swLeft.isChecked());
-            json.put("show_right_button", swRight.isChecked());
-            java.io.File f = new java.io.File(getFilesDir(), "enhanced_config.json");
-            java.io.FileWriter fw = new java.io.FileWriter(f);
-            fw.write(json.toString(2));
-            fw.close();
-            android.util.Log.i("Fcitx5Enh", "Settings direct file write OK: L=" + swLeft.isChecked());
-        } catch (Exception e) {
-            android.util.Log.e("Fcitx5Enh", "Settings direct file write failed: " + e);
-        }
-    }
-
 }

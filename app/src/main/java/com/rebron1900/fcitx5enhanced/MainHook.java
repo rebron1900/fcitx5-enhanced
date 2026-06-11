@@ -39,12 +39,15 @@ public class MainHook extends XposedModule {
         public boolean voice = true;
         public boolean leftBtn = true;
         public boolean rightBtn = true;
+        public boolean keyBorder = true;
     }
 
     private Config cfg = new Config();
     private boolean receiverRegistered;
     private android.content.BroadcastReceiver mReceiver;
     private View mCurrentInputView;
+    private android.content.SharedPreferences.OnSharedPreferenceChangeListener mThemePrefListener;
+    private boolean mConfigObserved;
 
     // ══════════════════════════════════════════
     //  Hook 入口
@@ -66,6 +69,8 @@ public class MainHook extends XposedModule {
                 if (v != null && CLS_IV.equals(v.getClass().getName())) {
                     readConfig(v);
                     if (!receiverRegistered) registerReapplyReceiver(v);
+                    registerThemePrefListener(v);
+                    registerConfigObserver(v);
                     mCurrentInputView = v;
                     View fv = v;
                     v.post(() -> applyAllEffects(fv));
@@ -94,7 +99,8 @@ public class MainHook extends XposedModule {
             cfg.voice = sp.getBoolean("voice_enabled", true);
             cfg.leftBtn = sp.getBoolean("show_left_button", true);
             cfg.rightBtn = sp.getBoolean("show_right_button", true);
-            Log.i(TAG, "read from fcitx5 SP: L=" + cfg.leftBtn + " R=" + cfg.rightBtn + " V=" + cfg.voice);
+            cfg.keyBorder = sp.getBoolean("key_border", true);
+            Log.i(TAG, "read from fcitx5 SP: L=" + cfg.leftBtn + " R=" + cfg.rightBtn + " V=" + cfg.voice + " K=" + cfg.keyBorder);
         } catch (Throwable t) {
             Log.w(TAG, "readConfig SP failed: " + t);
             cfg = new Config();
@@ -109,11 +115,22 @@ public class MainHook extends XposedModule {
         readConfig(inputView);
         Log.i(TAG, "applyAllEffects start");
 
+        // 检测暗色主题
+        boolean isDark = false;
+        try {
+            java.lang.reflect.Field tf = inputView.getClass().getSuperclass()
+                    .getDeclaredField("theme");
+            tf.setAccessible(true);
+            Object theme = tf.get(inputView);
+            java.lang.reflect.Method isDarkM = theme.getClass().getMethod("isDark");
+            isDark = (Boolean) isDarkM.invoke(theme);
+        } catch (Exception ignored) {}
+
         FrostedGlassHelper.apply(inputView, cfg);
         roundToolbarTop(inputView);
         PreeditHelper.apply(inputView, cfg);
         ExtraButtonsHelper.add(inputView, cfg);
-        KeyEffectsHelper.apply(inputView, cfg);
+        KeyEffectsHelper.apply(inputView, cfg, isDark);
 
         Log.i(TAG, "applyAllEffects done");
     }
@@ -203,7 +220,8 @@ public class MainHook extends XposedModule {
                         int bB = intent.getIntExtra("blur_radius", 100);
                         int bA = intent.getIntExtra("bg_alpha", 60);
                         int bC = intent.getIntExtra("corner_radius", 20);
-                        Log.i(TAG, "BROADCAST payload: L=" + bL + " R=" + bR + " V=" + bV);
+                        boolean bK = intent.getBooleanExtra("key_border", true);
+                        Log.i(TAG, "BROADCAST payload: L=" + bL + " R=" + bR + " V=" + bV + " K=" + bK);
 
                         try {
                             SharedPreferences sp = context
@@ -215,13 +233,14 @@ public class MainHook extends XposedModule {
                                 .putInt("blur_radius", bB)
                                 .putInt("bg_alpha", bA)
                                 .putInt("corner_radius", bC)
+                                .putBoolean("key_border", bK)
                                 .commit();
                         } catch (Throwable t) {
                             Log.w(TAG, "save to fcitx5 SP failed: " + t);
                         }
 
                         cfg.leftBtn = bL; cfg.rightBtn = bR; cfg.voice = bV;
-                        cfg.blur = bB; cfg.alpha = bA; cfg.corner = bC; cfg.toolbar = bC;
+                        cfg.blur = bB; cfg.alpha = bA; cfg.corner = bC; cfg.toolbar = bC; cfg.keyBorder = bK;
                         View curView = mCurrentInputView;
                         if (curView != null) curView.post(() -> applyAllEffects(curView));
                     } else {
@@ -255,8 +274,96 @@ public class MainHook extends XposedModule {
     }
 
     // ══════════════════════════════════════════
-    //  Module lifecycle
+    //  Theme preference change listener
     // ══════════════════════════════════════════
+
+    /** 监听 fcitx5 主题配置变化（key_radius 等），自动重绘按键描边。 */
+    private void registerThemePrefListener(View anyView) {
+        try {
+            if (mThemePrefListener != null) return; // 只注册一次
+            android.content.SharedPreferences sp =
+                android.preference.PreferenceManager.getDefaultSharedPreferences(
+                    anyView.getContext());
+            mThemePrefListener = (sp_, key) -> {
+                try {
+                    if ("key_radius".equals(key)) {
+                        Log.i(TAG, "key_radius changed, re-applying key borders");
+                        View cv = mCurrentInputView;
+                        if (cv != null) cv.post(() -> {
+                            readConfig(cv);
+                            // 只重载按键描边，不必全量 apply
+                            boolean isDark = false;
+                            try {
+                                java.lang.reflect.Field tf = cv.getClass().getSuperclass()
+                                        .getDeclaredField("theme");
+                                tf.setAccessible(true);
+                                Object theme = tf.get(cv);
+                                isDark = (Boolean) theme.getClass().getMethod("isDark").invoke(theme);
+                            } catch (Exception ignored) {}
+                            KeyEffectsHelper.apply(cv, cfg, isDark);
+                        });
+                    }
+                } catch (Throwable t) {
+                    Log.w(TAG, "theme pref listener: " + t.getMessage());
+                }
+            };
+            sp.registerOnSharedPreferenceChangeListener(mThemePrefListener);
+            Log.i(TAG, "theme pref listener registered");
+        } catch (Throwable t) {
+            Log.w(TAG, "register theme pref listener failed: " + t);
+        }
+    }
+
+    // ══════════════════════════════════════════
+    //  ConfigProvider ContentObserver
+    // ══════════════════════════════════════════
+
+    /** 监听 ConfigProvider 变化（SettingsActivity 写入时触发）。 */
+    private void registerConfigObserver(View anyView) {
+        if (mConfigObserved) return;
+        try {
+            android.net.Uri uri = android.net.Uri.parse("content://com.rebron1900.fcitx5enhanced.config");
+            anyView.getContext().getContentResolver().registerContentObserver(
+                    uri, false, new android.database.ContentObserver(null) {
+                        @Override
+                        public void onChange(boolean selfChange) {
+                            reapplyFromProvider(anyView);
+                        }
+                    });
+            mConfigObserved = true;
+            Log.i(TAG, "config observer registered");
+        } catch (Throwable t) {
+            Log.w(TAG, "config observer failed: " + t);
+        }
+    }
+
+    /** 从 ConfigProvider 读取配置并应用。 */
+    private void reapplyFromProvider(View anyView) {
+        try {
+            android.net.Uri uri = android.net.Uri.parse("content://com.rebron1900.fcitx5enhanced.config");
+            android.database.Cursor c = anyView.getContext()
+                    .getContentResolver().query(uri, null, null, null, null);
+            if (c != null && c.moveToFirst()) {
+                try {
+                    cfg.leftBtn = c.getInt(c.getColumnIndexOrThrow("show_left_button")) != 0;
+                    cfg.rightBtn = c.getInt(c.getColumnIndexOrThrow("show_right_button")) != 0;
+                    cfg.voice = c.getInt(c.getColumnIndexOrThrow("voice_enabled")) != 0;
+                    cfg.keyBorder = c.getInt(c.getColumnIndexOrThrow("key_border")) != 0;
+                    cfg.blur = c.getInt(c.getColumnIndexOrThrow("blur_radius"));
+                    cfg.alpha = c.getInt(c.getColumnIndexOrThrow("bg_alpha"));
+                    cfg.corner = c.getInt(c.getColumnIndexOrThrow("corner_radius"));
+                    cfg.toolbar = cfg.corner;
+                    Log.i(TAG, "reapply from provider: keyBorder=" + cfg.keyBorder);
+                } finally {
+                    c.close();
+                }
+            }
+            View cv = mCurrentInputView;
+            if (cv != null) cv.post(() -> applyAllEffects(cv));
+        } catch (Throwable t) {
+            Log.w(TAG, "reapplyFromProvider failed: " + t);
+        }
+    }
 
     @Override
     public void onModuleLoaded(ModuleLoadedParam p) {
