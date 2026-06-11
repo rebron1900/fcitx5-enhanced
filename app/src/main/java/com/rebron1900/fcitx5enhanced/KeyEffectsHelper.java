@@ -34,13 +34,12 @@ public class KeyEffectsHelper {
     private static int sIdSwitch = -1;
     private static boolean sIdResolved = false;
 
-    /** 缓存 SP 读取（fx_preferences 主题参数） */
-    private static int sCachedKeyRadius = -1;
-    private static boolean sCachedSpecialKeyOval = false;
-    private static boolean sSpCached = false;
-
     /** 标记 listener 中是否正在执行，防止重入 */
     private static boolean sApplying = false;
+
+    /** 每次 apply 时从 SP 读取的主题参数（不缓存，保证实时性） */
+    private static int sKeyRadius = 4;
+    private static boolean sSpecialKeyOval = false;
 
     public static void apply(View inputView, MainHook.Config c, boolean isDark) {
         try {
@@ -88,16 +87,13 @@ public class KeyEffectsHelper {
                 sIdSwitch = res.getIdentifier("button_layout_switch", "id", pkg);
             }
 
-            // 缓存 SP 读取（只读一次）
-            if (!sSpCached) {
-                sSpCached = true;
-                try {
-                    SharedPreferences sp = inputView.getContext().getSharedPreferences(
-                            "org.fcitx.fcitx5.android.fx_preferences", Context.MODE_PRIVATE);
-                    sCachedKeyRadius = sp.getInt("key_radius", 4);
-                    sCachedSpecialKeyOval = sp.getBoolean("special_key_oval_shape", false);
-                } catch (Exception ignored) {}
-            }
+            // 每次 apply 都读 SP（保证药丸设置实时生效）
+            try {
+                SharedPreferences sp = inputView.getContext().getSharedPreferences(
+                        "org.fcitx.fcitx5.android.fx_preferences", Context.MODE_PRIVATE);
+                sKeyRadius = sp.getInt("key_radius", 4);
+                sSpecialKeyOval = sp.getBoolean("special_key_oval_shape", false);
+            } catch (Exception ignored) {}
 
             Log.i(TAG, "key effects: alpha=" + keyAlpha);
         } catch (Throwable t) {
@@ -286,7 +282,7 @@ public class KeyEffectsHelper {
         }
         // 兜底：用缓存的 key_radius（仅当 drawable 链解析不到时）
         if (radius == 0 && !isOval) {
-            int kr = sSpCached ? sCachedKeyRadius : 4;
+            int kr = sKeyRadius;
             if (kr < 0) kr = 0;
             if (kr > 48) kr = 48;
             radius = Math.max(kr * den, 2f * den);
@@ -345,7 +341,7 @@ public class KeyEffectsHelper {
             KeyBgInfo info = parseKeyBg(keyView.getBackground(), keyView.getContext(), den);
 
             // 药丸检测：用缓存的资源 ID 和 SP 值
-            if (!info.isPill && !info.isOval && outer != null && sIdResolved && sCachedSpecialKeyOval) {
+            if (!info.isPill && !info.isOval && outer != null && sIdResolved && sSpecialKeyOval) {
                 try {
                     Object tag = outer.getTag();
                     if (tag instanceof Integer) {
