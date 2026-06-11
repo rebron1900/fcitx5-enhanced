@@ -1,6 +1,10 @@
 package com.rebron1900.fcitx5enhanced;
 
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.InsetDrawable;
+import android.os.Build;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
@@ -17,7 +21,7 @@ public class KeyEffectsHelper {
     private static ViewTreeObserver.OnGlobalLayoutListener mPopupLayoutListener;
     private static int mPopupAlpha = 120;
 
-    public static void apply(View inputView, MainHook.Config c) {
+    public static void apply(View inputView, MainHook.Config c, boolean isDark) {
         mPopupAlpha = Math.min(c.alpha + 80, 180);
 
         // ... rest follows
@@ -36,8 +40,14 @@ public class KeyEffectsHelper {
             if (mKeyLayoutListener != null) {
                 wmView.getViewTreeObserver().removeOnGlobalLayoutListener(mKeyLayoutListener);
             }
-            mKeyLayoutListener = () -> makeKeysTranslucent(wmView, keyAlpha);
+            mKeyLayoutListener = () -> {
+                makeKeysTranslucent(wmView, keyAlpha);
+                if (c.keyBorder) addKeyBorders(wmView, c, isDark);
+            };
             wmView.getViewTreeObserver().addOnGlobalLayoutListener(mKeyLayoutListener);
+
+            // 初始应用按键描边
+            if (c.keyBorder) addKeyBorders(wmView, c, isDark);
 
             // Popup 悬浮窗背景半透明
             try {
@@ -134,6 +144,113 @@ public class KeyEffectsHelper {
             if (child instanceof ViewGroup) {
                 makePopupTranslucent((ViewGroup) child);
             }
+        }
+    }
+
+    // ══════════════════════════════════════════
+    //  按键玻璃描边 — 每个按键顶部+转角
+    // ══════════════════════════════════════════
+
+    /** 遍历键盘视图树，给每个按键的 appearanceView 加玻璃描边。 */
+    private static void addKeyBorders(ViewGroup root, MainHook.Config c, boolean isDark) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
+        for (int i = 0; i < root.getChildCount(); i++) {
+            View child = root.getChildAt(i);
+            try {
+                View appView = findAppearanceView(child);
+                if (appView != null) {
+                    applyKeyGlassBorder(appView, c, isDark);
+                }
+            } catch (Exception ignored) {}
+            if (child instanceof ViewGroup) {
+                addKeyBorders((ViewGroup) child, c, isDark);
+            }
+        }
+    }
+
+    /** 从 appearanceView 的背景读取 layer insets，圆角从 fcitx5 主题配置读。 */
+    private static class KeyBgInfo {
+        float radius;
+        int hInset;
+        int vInset;
+        KeyBgInfo(float r, int h, int v) { radius = r; hInset = h; vInset = v; }
+    }
+
+    /** 从 background LayerDrawable 解析 insets，从 SharedPreferences 读 key_radius。 */
+    private static KeyBgInfo parseKeyBg(Drawable bg, Context ctx, float den) {
+        int hInset = 0, vInset = 0;
+        float r;
+
+        // 圆角从 fcitx5 主题配置读
+        int kr = 4;
+        try {
+            SharedPreferences sp = ctx.getSharedPreferences(
+                    "org.fcitx.fcitx5.android.fx_preferences", Context.MODE_PRIVATE);
+            kr = sp.getInt("key_radius", 4);
+            if (kr < 0) kr = 0;
+            if (kr > 48) kr = 48;
+        } catch (Exception ignored) {}
+        r = Math.max(kr * den, 2f * den);
+
+        // insets 从 LayerDrawable 的 layer 实际渲染 inset 读
+        if (bg instanceof android.graphics.drawable.LayerDrawable) {
+            android.graphics.drawable.LayerDrawable ld = (android.graphics.drawable.LayerDrawable) bg;
+            for (int i = 0; i < ld.getNumberOfLayers(); i++) {
+                int inL = ld.getLayerInsetLeft(i);
+                int inT = ld.getLayerInsetTop(i);
+                int inR = ld.getLayerInsetRight(i);
+                int inB = ld.getLayerInsetBottom(i);
+                if (inL == inR && inT == inB) {
+                    hInset = Math.max(hInset, inL);
+                    vInset = Math.max(vInset, inT);
+                }
+            }
+        }
+        return new KeyBgInfo(r, hInset, vInset);
+    }
+
+    /** 给单个按键套上 InsetDrawable + GlassBorderDrawable 作为 foreground，保留原有 press highlight。 */
+    private static void applyKeyGlassBorder(View keyView, MainHook.Config c, boolean isDark) {
+        try {
+            float den = keyView.getResources().getDisplayMetrics().density;
+
+            int borderTop, borderBottom;
+            float borderWidthPx;
+            if (isDark) {
+                borderTop = 0x22FFFFFF;      // 暗色：极淡白
+                borderBottom = 0x22FFFFFF;
+                borderWidthPx = 0.8f * den;   // 0.8dp
+            } else {
+                borderTop = 0x66FFFFFF;       // 亮色：半透白
+                borderBottom = 0x66FFFFFF;
+                borderWidthPx = 0.8f * den;
+            }
+
+            // 从 background LayerDrawable 解析 insets，圆角从主题配置读
+            KeyBgInfo info = parseKeyBg(keyView.getBackground(), keyView.getContext(), den);
+
+            GlassBorderDrawable gb = new GlassBorderDrawable(
+                    0, borderTop, borderBottom, info.radius, borderWidthPx,
+                    GlassBorderDrawable.MODE_DIAGONAL);
+
+            Drawable glassFg;
+            if (info.hInset > 0 || info.vInset > 0) {
+                glassFg = new InsetDrawable(gb, info.hInset, info.vInset, info.hInset, info.vInset);
+            } else {
+                glassFg = gb;
+            }
+
+            // 与原 foreground（press highlight）叠层，不丢失按键反馈
+            Drawable existingFg = keyView.getForeground();
+            if (existingFg != null) {
+                android.graphics.drawable.LayerDrawable ld = new android.graphics.drawable.LayerDrawable(
+                        new Drawable[]{glassFg, existingFg});
+                keyView.setForeground(ld);
+            } else {
+                keyView.setForeground(glassFg);
+            }
+        } catch (Throwable t) {
+            Log.w(TAG, "key glass border: " + t.getMessage());
         }
     }
 }

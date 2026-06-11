@@ -335,7 +335,8 @@ public class FrostedGlassHelper {
                     inputView.getResources().getDisplayMetrics());
 
             GlassBorderDrawable gb = new GlassBorderDrawable(
-                    0, borderTop, borderBottom, radius, borderWidthPx, true);
+                    0, borderTop, borderBottom, radius, borderWidthPx,
+                    GlassBorderDrawable.MODE_KEYBOARD);
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 keyboardView.setForeground(gb);
