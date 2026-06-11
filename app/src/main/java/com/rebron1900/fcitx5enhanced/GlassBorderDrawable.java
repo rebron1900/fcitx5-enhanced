@@ -36,6 +36,8 @@ public class GlassBorderDrawable extends Drawable {
     private final int mBottomBorderColor;
     private final int mMode;
     private final boolean mIsOval;
+    private final int mInsetH;  // 内部水平 inset（不通过 InsetDrawable，避免影响其他层）
+    private final int mInsetV;  // 内部垂直 inset
 
     // ── 弹窗模式 ──
     private final Path mPopupPath = new Path();
@@ -65,25 +67,35 @@ public class GlassBorderDrawable extends Drawable {
     public GlassBorderDrawable(int fillColor, int topBorderColor, int bottomBorderColor,
                                float cornerRadiusPx, float borderWidthPx) {
         this(fillColor, topBorderColor, bottomBorderColor,
-                cornerRadiusPx, borderWidthPx, MODE_POPUP, false);
+                cornerRadiusPx, borderWidthPx, MODE_POPUP, false, 0, 0);
     }
 
     /** 指定模式 */
     public GlassBorderDrawable(int fillColor, int topBorderColor, int bottomBorderColor,
                                float cornerRadiusPx, float borderWidthPx, int mode) {
         this(fillColor, topBorderColor, bottomBorderColor,
-                cornerRadiusPx, borderWidthPx, mode, false);
+                cornerRadiusPx, borderWidthPx, mode, false, 0, 0);
     }
 
     /** 指定模式 + 是否椭圆 */
     public GlassBorderDrawable(int fillColor, int topBorderColor, int bottomBorderColor,
                                float cornerRadiusPx, float borderWidthPx, int mode, boolean isOval) {
+        this(fillColor, topBorderColor, bottomBorderColor,
+                cornerRadiusPx, borderWidthPx, mode, isOval, 0, 0);
+    }
+
+    /** 指定模式 + 是否椭圆 + 内部 inset（不通过 InsetDrawable，避免影响 LayerDrawable 其他层） */
+    public GlassBorderDrawable(int fillColor, int topBorderColor, int bottomBorderColor,
+                               float cornerRadiusPx, float borderWidthPx, int mode, boolean isOval,
+                               int insetH, int insetV) {
         mRadius = cornerRadiusPx;
         mBorderWidth = borderWidthPx;
         mTopBorderColor = topBorderColor;
         mBottomBorderColor = bottomBorderColor;
         mMode = mode;
         mIsOval = isOval;
+        mInsetH = insetH;
+        mInsetV = insetV;
 
         mFillPaint.setColor(fillColor);
         mFillPaint.setStyle(Paint.Style.FILL);
@@ -170,17 +182,18 @@ public class GlassBorderDrawable extends Drawable {
     }
 
     private void buildDiagonal(Rect bounds) {
-        // 全圆角矩形（inset=borderWidth），描边完全在内部
-        float inset = mBorderWidth;
+        // 全圆角矩形，inset = borderWidth + 内部 inset（hMargin/vMargin）
+        float insetH = mBorderWidth + mInsetH;
+        float insetV = mBorderWidth + mInsetV;
         if (mIsOval) {
             mDgFullPath.addOval(
-                    bounds.left + inset, bounds.top + inset,
-                    bounds.right - inset, bounds.bottom - inset,
+                    bounds.left + insetH, bounds.top + insetV,
+                    bounds.right - insetH, bounds.bottom - insetV,
                     Path.Direction.CW);
         } else {
             mDgFullPath.addRoundRect(
-                    bounds.left + inset, bounds.top + inset,
-                    bounds.right - inset, bounds.bottom - inset,
+                    bounds.left + insetH, bounds.top + insetV,
+                    bounds.right - insetH, bounds.bottom - insetV,
                     mRadius, mRadius, Path.Direction.CW);
         }
 

@@ -220,7 +220,7 @@ public class ExtraButtonsHelper {
             } catch (Exception e) {
                 fgColor = 0xFF333333; borderColor = 0xFFCCCCCC;
             }
-            bgColor = Color.argb(160,
+            bgColor = Color.argb(255,
                     Color.red(keyBgRead), Color.green(keyBgRead), Color.blue(keyBgRead));
             final boolean fDark = darkRef[0];
 
@@ -282,10 +282,11 @@ public class ExtraButtonsHelper {
             int imeW_DP = 180;
 
             FrameLayout outer = new FrameLayout(ctx);
-            int borderTop = fDark ? 0x55FFFFFF : 0x40FFFFFF;
-            int borderBottom = fDark ? 0x18FFFFFF : 0x10FFFFFF;
-            outer.setBackground(new GlassBorderDrawable(
-                    bgColor, borderTop, borderBottom, corner, 1.5f * den));
+            GradientDrawable outerBg = new GradientDrawable();
+            outerBg.setShape(GradientDrawable.RECTANGLE);
+            outerBg.setColor(bgColor);
+            outerBg.setCornerRadius(corner);
+            outer.setBackground(outerBg);
             outer.setClipToOutline(true);
             outer.setPadding(0, 0, 0, corner);
             outer.addView(layout, new FrameLayout.LayoutParams(
@@ -344,7 +345,7 @@ public class ExtraButtonsHelper {
             } catch (Exception e) {
                 fgColor = 0xFF333333; borderColor = 0xFFCCCCCC; dimColor = 0xFF999999;
             }
-            bgColor = Color.argb(160,
+            bgColor = Color.argb(255,
                     Color.red(keyBgRead2), Color.green(keyBgRead2), Color.blue(keyBgRead2));
 
             LinearLayout layout = new LinearLayout(ctx);
@@ -452,10 +453,11 @@ public class ExtraButtonsHelper {
                     ViewGroup.LayoutParams.WRAP_CONTENT));
 
             FrameLayout outer = new FrameLayout(ctx);
-            int cbBorderTop = darkRef2[0] ? 0x55FFFFFF : 0x40FFFFFF;
-            int cbBorderBottom = darkRef2[0] ? 0x18FFFFFF : 0x10FFFFFF;
-            outer.setBackground(new GlassBorderDrawable(
-                    bgColor, cbBorderTop, cbBorderBottom, corner, 1.5f * den));
+            GradientDrawable outerBg2 = new GradientDrawable();
+            outerBg2.setShape(GradientDrawable.RECTANGLE);
+            outerBg2.setColor(bgColor);
+            outerBg2.setCornerRadius(corner);
+            outer.setBackground(outerBg2);
             outer.setClipToOutline(true);
             outer.setPadding(0, 0, 0, corner);
             outer.addView(sv, new FrameLayout.LayoutParams(

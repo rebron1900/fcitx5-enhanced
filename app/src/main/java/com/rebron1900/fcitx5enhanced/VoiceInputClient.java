@@ -61,7 +61,7 @@ public class VoiceInputClient {
     private volatile boolean mHolding;
     private volatile boolean mConsumed;  // Atomic 语义：一旦标记就不再提交文字
     private volatile boolean mFinalized; // 收到最终结果（可能有 AI 润色版跟随）
-    private String mRawText;             // 第1次 onFinal 的原始识别文本
+    private volatile String mRawText;      // 第1次 onFinal 的原始识别文本
     private Runnable mCommitTimer;       // 延时 commit 兜底
     private InputMethodService mService;
     private IBinder mRemote;
@@ -497,6 +497,7 @@ public class VoiceInputClient {
         mBound = false;
         mConnection = null;
         mRemote = null;
+        mService = null;
         mSessionId = -1;
         mCurrentState = STATE_IDLE;
         mHasPcmFrame = false;

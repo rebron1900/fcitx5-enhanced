@@ -327,7 +327,8 @@ public class MainHook extends XposedModule {
                     uri, false, new android.database.ContentObserver(null) {
                         @Override
                         public void onChange(boolean selfChange) {
-                            reapplyFromProvider(anyView);
+                            View cv = mCurrentInputView;
+                            if (cv != null) reapplyFromProvider(cv);
                         }
                     });
             mConfigObserved = true;

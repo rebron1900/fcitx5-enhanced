@@ -3,7 +3,6 @@ package com.rebron1900.fcitx5enhanced;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.InsetDrawable;
 import android.os.Build;
 import android.util.Log;
 import android.view.View;
@@ -14,21 +13,36 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.WeakHashMap;
 
-/** 按键 + 弹窗 半透明磨砂效果。 */
+/** 按键半透明磨砂效果 + 描边。 */
 public class KeyEffectsHelper {
     private static final String TAG = "Fcitx5Enh";
 
     private static ViewTreeObserver.OnGlobalLayoutListener mKeyLayoutListener;
-    private static ViewTreeObserver.OnGlobalLayoutListener mPopupLayoutListener;
-    private static int mPopupAlpha = 120;
+    private static ViewGroup mAttachedView;
 
     /** 保存每个按键的原始 foreground（press highlight），防止重绘时嵌套叠加。 */
     private static final WeakHashMap<View, Drawable> sOriginalForegrounds = new WeakHashMap<>();
 
-    public static void apply(View inputView, MainHook.Config c, boolean isDark) {
-        mPopupAlpha = Math.min(c.alpha + 80, 180);
+    /** 标记已设置描边的 view，避免重复设置 */
+    private static final WeakHashMap<View, Boolean> sBorderedViews = new WeakHashMap<>();
 
-        // ... rest follows
+    /** 缓存 appearanceView 反射结果（View→View），miss 不缓存（反射失败本身就很快） */
+    private static final WeakHashMap<View, View> sAppearanceCache = new WeakHashMap<>();
+
+    /** 缓存资源 ID，避免每次 getIdentifier 查找 */
+    private static int sIdReturn = -1;
+    private static int sIdSwitch = -1;
+    private static boolean sIdResolved = false;
+
+    /** 缓存 SP 读取（fx_preferences 主题参数） */
+    private static int sCachedKeyRadius = -1;
+    private static boolean sCachedSpecialKeyOval = false;
+    private static boolean sSpCached = false;
+
+    /** 标记 listener 中是否正在执行，防止重入 */
+    private static boolean sApplying = false;
+
+    public static void apply(View inputView, MainHook.Config c, boolean isDark) {
         try {
             Field wf = inputView.getClass().getDeclaredField("windowManager");
             wf.setAccessible(true);
@@ -39,42 +53,68 @@ public class KeyEffectsHelper {
 
             int keyAlpha = Math.min(c.alpha + 80, 200);
 
+            // 移除旧 listener
+            removeOldListener();
+
+            // 清除旧缓存（主题切换后 view 全换了，旧标记无效）
+            sBorderedViews.clear();
+            sOriginalForegrounds.clear();
+            sAppearanceCache.clear();
+
+            // 初次应用 — 只做一次，不靠 listener
             makeKeysTranslucent(wmView, keyAlpha);
-
-            if (mKeyLayoutListener != null) {
-                wmView.getViewTreeObserver().removeOnGlobalLayoutListener(mKeyLayoutListener);
-            }
-            mKeyLayoutListener = () -> {
-                makeKeysTranslucent(wmView, keyAlpha);
-                if (c.keyBorder) addKeyBorders(wmView, c, isDark);
-            };
-            wmView.getViewTreeObserver().addOnGlobalLayoutListener(mKeyLayoutListener);
-
-            // 初始应用按键描边
             if (c.keyBorder) addKeyBorders(wmView, c, isDark);
 
-            // Popup 悬浮窗背景半透明
-            try {
-                Field pf = inputView.getClass().getDeclaredField("popup");
-                pf.setAccessible(true);
-                final Object popupComponent = pf.get(inputView);
-                Method getRoot = popupComponent.getClass().getMethod("getRoot");
-                final ViewGroup popupRoot = (ViewGroup) getRoot.invoke(popupComponent);
-                if (popupRoot != null) {
-                    if (mPopupLayoutListener != null) {
-                        popupRoot.getViewTreeObserver().removeOnGlobalLayoutListener(mPopupLayoutListener);
-                    }
-                    mPopupLayoutListener = () -> makePopupTranslucent(popupRoot);
-                    popupRoot.getViewTreeObserver().addOnGlobalLayoutListener(mPopupLayoutListener);
-                    makePopupTranslucent(popupRoot);
+            // listener 只处理新增按键（如切换键盘布局时新出现的按键）
+            // 不再重复 makeKeysTranslucent（alpha 不变）
+            mKeyLayoutListener = () -> {
+                if (sApplying) return;  // 防重入
+                sApplying = true;
+                try {
+                    if (c.keyBorder) addKeyBorders(wmView, c, isDark);
+                } finally {
+                    sApplying = false;
                 }
-            } catch (Exception e) {
-                Log.w(TAG, "popup effects: " + e.getMessage());
+            };
+            mAttachedView = wmView;
+            wmView.getViewTreeObserver().addOnGlobalLayoutListener(mKeyLayoutListener);
+
+            // 解析资源 ID（只做一次）
+            if (!sIdResolved) {
+                sIdResolved = true;
+                String pkg = inputView.getContext().getPackageName();
+                android.content.res.Resources res = inputView.getContext().getResources();
+                sIdReturn = res.getIdentifier("button_return", "id", pkg);
+                sIdSwitch = res.getIdentifier("button_layout_switch", "id", pkg);
+            }
+
+            // 缓存 SP 读取（只读一次）
+            if (!sSpCached) {
+                sSpCached = true;
+                try {
+                    SharedPreferences sp = inputView.getContext().getSharedPreferences(
+                            "org.fcitx.fcitx5.android.fx_preferences", Context.MODE_PRIVATE);
+                    sCachedKeyRadius = sp.getInt("key_radius", 4);
+                    sCachedSpecialKeyOval = sp.getBoolean("special_key_oval_shape", false);
+                } catch (Exception ignored) {}
             }
 
             Log.i(TAG, "key effects: alpha=" + keyAlpha);
         } catch (Throwable t) {
             Log.w(TAG, "applyKeyEffects: " + t.getMessage());
+        }
+    }
+
+    private static void removeOldListener() {
+        if (mKeyLayoutListener != null && mAttachedView != null) {
+            try {
+                ViewTreeObserver vto = mAttachedView.getViewTreeObserver();
+                if (vto.isAlive()) {
+                    vto.removeOnGlobalLayoutListener(mKeyLayoutListener);
+                }
+            } catch (Exception ignored) {}
+            mKeyLayoutListener = null;
+            mAttachedView = null;
         }
     }
 
@@ -107,13 +147,21 @@ public class KeyEffectsHelper {
         }
     }
 
+    /** 带缓存的 appearanceView 查找 */
     private static View findAppearanceView(View v) {
+        View cached = sAppearanceCache.get(v);
+        if (cached != null) return cached;
+
         Class<?> c = v.getClass();
         while (c != null && c != Object.class) {
             try {
                 Field f = c.getDeclaredField("appearanceView");
                 f.setAccessible(true);
-                return (View) f.get(v);
+                View result = (View) f.get(v);
+                if (result != null) {
+                    sAppearanceCache.put(v, result);
+                }
+                return result;
             } catch (Exception ignored) {}
             c = c.getSuperclass();
         }
@@ -138,19 +186,6 @@ public class KeyEffectsHelper {
         }
     }
 
-    private static void makePopupTranslucent(ViewGroup root) {
-        int pa = mPopupAlpha;
-        if (pa > 240) return;
-        for (int i = 0; i < root.getChildCount(); i++) {
-            View child = root.getChildAt(i);
-            Drawable bg = child.getBackground();
-            if (bg != null) bg.setAlpha(pa);
-            if (child instanceof ViewGroup) {
-                makePopupTranslucent((ViewGroup) child);
-            }
-        }
-    }
-
     // ══════════════════════════════════════════
     //  按键玻璃描边 — 每个按键顶部+转角
     // ══════════════════════════════════════════
@@ -163,6 +198,9 @@ public class KeyEffectsHelper {
             try {
                 View appView = findAppearanceView(child);
                 if (appView != null) {
+                    if (sBorderedViews.containsKey(appView)) {
+                        continue;  // 已描边，跳过（不再检查 LayerDrawable）
+                    }
                     applyKeyGlassBorder(appView, c, isDark);
                 }
             } catch (Exception ignored) {}
@@ -172,25 +210,25 @@ public class KeyEffectsHelper {
         }
     }
 
-    /** 从 actual drawable 链解析：边距（InsetDrawable/LayerDrawable）、圆角（GradientDrawable）、形状（oval/pill/rect）。 */
+    /** 从 actual drawable 链解析：边距、圆角、形状 */
     private static class KeyBgInfo {
         float radius;
         int hInset;
         int vInset;
         boolean isOval;
-        boolean isPill;    // cornerRadius=Float.MAX_VALUE → Gboard 药丸（胶囊形）
-        KeyBgInfo(float r, int h, int v, boolean oval, boolean pill) { radius = r; hInset = h; vInset = v; isOval = oval; isPill = pill; }
+        boolean isPill;
+        KeyBgInfo(float r, int h, int v, boolean oval, boolean pill) {
+            radius = r; hInset = h; vInset = v; isOval = oval; isPill = pill;
+        }
     }
 
-    /** 遍历 drawable 链（InsetDrawable → LayerDrawable → GradientDrawable），
-     *  从最内层提取实际圆角和形状，从各层累计边距。不再依赖 key_radius SP。 */
+    /** 遍历 drawable 链提取实际圆角和形状 */
     private static KeyBgInfo parseKeyBg(Drawable bg, Context ctx, float den) {
         int hInset = 0, vInset = 0;
         float radius = 0f;
         boolean isOval = false;
         boolean isPill = false;
 
-        // 逐层剥离 wrapper drawable
         Drawable d = bg;
         while (d != null) {
             if (d instanceof android.graphics.drawable.InsetDrawable) {
@@ -202,7 +240,6 @@ public class KeyEffectsHelper {
                 d = id.getDrawable();
             } else if (d instanceof android.graphics.drawable.LayerDrawable) {
                 android.graphics.drawable.LayerDrawable ld = (android.graphics.drawable.LayerDrawable) d;
-                // 取最后一层（key 着色层）的 inset
                 int last = ld.getNumberOfLayers() - 1;
                 int inL = ld.getLayerInsetLeft(last);
                 int inT = ld.getLayerInsetTop(last);
@@ -215,61 +252,50 @@ public class KeyEffectsHelper {
                 d = ld.getDrawable(last);
             } else if (d instanceof android.graphics.drawable.GradientDrawable) {
                 android.graphics.drawable.GradientDrawable gd = (android.graphics.drawable.GradientDrawable) d;
-                // 检查形状：OVAL 就标记跳过
                 try {
-                    java.lang.reflect.Field shapeField = android.graphics.drawable.GradientDrawable.class
+                    Field shapeField = android.graphics.drawable.GradientDrawable.class
                             .getDeclaredField("mShape");
                     shapeField.setAccessible(true);
                     int shape = shapeField.getInt(gd);
                     isOval = (shape == android.graphics.drawable.GradientDrawable.OVAL);
                 } catch (Exception ignored) {}
-                // 读实际圆角半径
                 if (Build.VERSION.SDK_INT >= 29) {
                     float[] radii = gd.getCornerRadii();
                     if (radii != null && radii.length > 0 && radii[0] > 0) {
                         radius = radii[0];
                     }
                 }
-                // API <29 反射读 mRadius（所有角统一圆角时用）
                 if (radius == 0) {
                     try {
-                        java.lang.reflect.Field rField = android.graphics.drawable.GradientDrawable.class
+                        Field rField = android.graphics.drawable.GradientDrawable.class
                                 .getDeclaredField("mRadius");
                         rField.setAccessible(true);
                         float fr = rField.getFloat(gd);
                         if (fr > 0) radius = fr;
                     } catch (Exception ignored) {}
                 }
-                // 药丸检测：cornerRadius >= 10000px → Float.MAX_VALUE 药丸（Gboard pill）
                 if (radius >= 10000f) {
                     isPill = true;
                     isOval = false;
-                    radius = 0f; // 由调用方从 keyView 尺寸计算
+                    radius = 0f;
                 }
-                break; // 最内层，停止
+                break;
             } else {
                 break;
             }
         }
-
-        // 兜底：从 SP 读 key_radius（仅当 drawable 链解析不到时）
+        // 兜底：用缓存的 key_radius（仅当 drawable 链解析不到时）
         if (radius == 0 && !isOval) {
-            int kr = 4;
-            try {
-                android.content.SharedPreferences sp = ctx.getSharedPreferences(
-                        "org.fcitx.fcitx5.android.fx_preferences", Context.MODE_PRIVATE);
-                kr = sp.getInt("key_radius", 4);
-                if (kr < 0) kr = 0;
-                if (kr > 48) kr = 48;
-            } catch (Exception ignored) {}
+            int kr = sSpCached ? sCachedKeyRadius : 4;
+            if (kr < 0) kr = 0;
+            if (kr > 48) kr = 48;
             radius = Math.max(kr * den, 2f * den);
         }
 
         return new KeyBgInfo(radius, hInset, vInset, isOval, isPill);
     }
 
-    /** 给单个按键套上 InsetDrawable + GlassBorderDrawable 作为 foreground，保留原有 press highlight。
-     *  用 WeakHashMap 缓存原始 foreground，避免每次重绘层叠嵌套（"循环描边" bug）。 */
+    /** 给单个按键套上描边 foreground */
     private static void applyKeyGlassBorder(View keyView, MainHook.Config c, boolean isDark) {
         try {
             float den = keyView.getResources().getDisplayMetrics().density;
@@ -277,83 +303,83 @@ public class KeyEffectsHelper {
             int borderTop, borderBottom;
             float borderWidthPx;
             if (isDark) {
-                borderTop = 0x22FFFFFF;      // 暗色：极淡白
-                borderBottom = 0x22FFFFFF;
-                borderWidthPx = 0.8f * den;   // 0.8dp
+                borderTop = 0x33FFFFFF;
+                borderBottom = 0x33FFFFFF;
+                borderWidthPx = 0.8f * den;
             } else {
-                borderTop = 0x66FFFFFF;       // 亮色：半透白
-                borderBottom = 0x66FFFFFF;
+                borderTop = 0x88FFFFFF;
+                borderBottom = 0x88FFFFFF;
                 borderWidthPx = 0.8f * den;
             }
 
-            // 从 KeyView 父类反射读 hMargin/vMargin（主题按键边距设置），比 drawable insets 更准确
             int hMargin = 0, vMargin = 0;
+            View outer = null;
             try {
-                // appearanceView.getParent() → outer KeyView
-                View outer = (View) keyView.getParent();
+                outer = (View) keyView.getParent();
                 if (outer != null) {
+                    boolean foundH = false, foundV = false;
                     Class<?> cls = outer.getClass();
-                    while (cls != null && cls != Object.class) {
-                        try {
-                            java.lang.reflect.Field hm = cls.getDeclaredField("hMargin");
-                            hm.setAccessible(true);
-                            hMargin = hm.getInt(outer);
-                            break;
-                        } catch (NoSuchFieldException ignored) {
-                            cls = cls.getSuperclass();
+                    while (cls != null && cls != Object.class && (!foundH || !foundV)) {
+                        if (!foundH) {
+                            try {
+                                Field hm = cls.getDeclaredField("hMargin");
+                                hm.setAccessible(true);
+                                hMargin = hm.getInt(outer);
+                                foundH = true;
+                            } catch (NoSuchFieldException ignored) {}
                         }
-                    }
-                    cls = outer.getClass();
-                    while (cls != null && cls != Object.class) {
-                        try {
-                            java.lang.reflect.Field vm = cls.getDeclaredField("vMargin");
-                            vm.setAccessible(true);
-                            vMargin = vm.getInt(outer);
-                            break;
-                        } catch (NoSuchFieldException ignored) {
-                            cls = cls.getSuperclass();
+                        if (!foundV) {
+                            try {
+                                Field vm = cls.getDeclaredField("vMargin");
+                                vm.setAccessible(true);
+                                vMargin = vm.getInt(outer);
+                                foundV = true;
+                            } catch (NoSuchFieldException ignored) {}
                         }
+                        if (!foundH || !foundV) cls = cls.getSuperclass();
+                        else break;
                     }
                 }
             } catch (Exception ignored) {}
 
-            // 从实际 drawable 链解析圆角/形状/额外内边距
             KeyBgInfo info = parseKeyBg(keyView.getBackground(), keyView.getContext(), den);
 
-            // 药丸：用 keyView 实际尺寸计算有效圆角
-            if (info.isPill) {
+            // 药丸检测：用缓存的资源 ID 和 SP 值
+            if (!info.isPill && !info.isOval && outer != null && sIdResolved && sCachedSpecialKeyOval) {
+                try {
+                    Object tag = outer.getTag();
+                    if (tag instanceof Integer) {
+                        int vid = (Integer) tag;
+                        if (vid == sIdReturn || vid == sIdSwitch) {
+                            info.isPill = true;
+                            info.radius = Math.min(keyView.getWidth(), keyView.getHeight()) * 0.5f;
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+
+            if (info.isPill && info.radius <= 0) {
                 info.radius = Math.min(keyView.getWidth(), keyView.getHeight()) * 0.5f;
             }
 
-            // 内边距取 KeyView 的 hMargin/vMargin（主题设置），drawable insets 作为兜底
             int useH = Math.max(hMargin, info.hInset);
             int useV = Math.max(vMargin, info.vInset);
 
             GlassBorderDrawable gb;
             if (info.isOval) {
-                // 椭圆按键描边加粗 1.8x，视觉上跟上其他键
                 gb = new GlassBorderDrawable(
                         0, borderTop, borderBottom, info.radius, borderWidthPx * 1.8f,
-                        GlassBorderDrawable.MODE_DIAGONAL, true);
+                        GlassBorderDrawable.MODE_DIAGONAL, true, useH, useV);
             } else if (info.isPill) {
-                // 药丸（胶囊形）描边加粗 1.8x，跟椭圆同理
                 gb = new GlassBorderDrawable(
                         0, borderTop, borderBottom, info.radius, borderWidthPx * 1.8f,
-                        GlassBorderDrawable.MODE_DIAGONAL, false);
+                        GlassBorderDrawable.MODE_DIAGONAL, false, useH, useV);
             } else {
                 gb = new GlassBorderDrawable(
                         0, borderTop, borderBottom, info.radius, borderWidthPx,
-                        GlassBorderDrawable.MODE_DIAGONAL, false);
+                        GlassBorderDrawable.MODE_DIAGONAL, false, useH, useV);
             }
 
-            Drawable glassFg;
-            if (useH > 0 || useV > 0) {
-                glassFg = new InsetDrawable(gb, useH, useV, useH, useV);
-            } else {
-                glassFg = gb;
-            }
-
-            // 用缓存的原始 foreground（仅 press highlight），避免嵌套叠加
             Drawable originalFg = sOriginalForegrounds.get(keyView);
             if (originalFg == null) {
                 originalFg = keyView.getForeground();
@@ -362,11 +388,13 @@ public class KeyEffectsHelper {
 
             if (originalFg != null) {
                 android.graphics.drawable.LayerDrawable ld = new android.graphics.drawable.LayerDrawable(
-                        new Drawable[]{glassFg, originalFg});
+                        new Drawable[]{gb, originalFg});
                 keyView.setForeground(ld);
             } else {
-                keyView.setForeground(glassFg);
+                keyView.setForeground(gb);
             }
+
+            sBorderedViews.put(keyView, Boolean.TRUE);
         } catch (Throwable t) {
             Log.w(TAG, "key glass border: " + t.getMessage());
         }
