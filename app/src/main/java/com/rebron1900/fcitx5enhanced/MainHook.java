@@ -286,8 +286,8 @@ public class MainHook extends XposedModule {
                     anyView.getContext());
             mThemePrefListener = (sp_, key) -> {
                 try {
-                    if ("key_radius".equals(key)) {
-                        Log.i(TAG, "key_radius changed, re-applying key borders");
+                    if ("key_radius".equals(key) || "special_key_oval_shape".equals(key)) {
+                        Log.i(TAG, key + " changed, re-applying key borders");
                         View cv = mCurrentInputView;
                         if (cv != null) cv.post(() -> {
                             readConfig(cv);
