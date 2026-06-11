@@ -278,12 +278,46 @@ public class KeyEffectsHelper {
                 borderWidthPx = 0.8f * den;
             }
 
-            // 从实际 drawable 链解析圆角/形状/边距（不依赖 SP）
+            // 从 KeyView 父类反射读 hMargin/vMargin（主题按键边距设置），比 drawable insets 更准确
+            int hMargin = 0, vMargin = 0;
+            try {
+                // appearanceView.getParent() → outer KeyView
+                View outer = (View) keyView.getParent();
+                if (outer != null) {
+                    Class<?> cls = outer.getClass();
+                    while (cls != null && cls != Object.class) {
+                        try {
+                            java.lang.reflect.Field hm = cls.getDeclaredField("hMargin");
+                            hm.setAccessible(true);
+                            hMargin = hm.getInt(outer);
+                            break;
+                        } catch (NoSuchFieldException ignored) {
+                            cls = cls.getSuperclass();
+                        }
+                    }
+                    cls = outer.getClass();
+                    while (cls != null && cls != Object.class) {
+                        try {
+                            java.lang.reflect.Field vm = cls.getDeclaredField("vMargin");
+                            vm.setAccessible(true);
+                            vMargin = vm.getInt(outer);
+                            break;
+                        } catch (NoSuchFieldException ignored) {
+                            cls = cls.getSuperclass();
+                        }
+                    }
+                }
+            } catch (Exception ignored) {}
+
+            // 从实际 drawable 链解析圆角/形状/额外内边距
             KeyBgInfo info = parseKeyBg(keyView.getBackground(), keyView.getContext(), den);
+
+            // 内边距取 KeyView 的 hMargin/vMargin（主题设置），drawable insets 作为兜底
+            int useH = Math.max(hMargin, info.hInset);
+            int useV = Math.max(vMargin, info.vInset);
 
             GlassBorderDrawable gb;
             if (info.isOval) {
-                // 椭圆按键（回车键）：使用椭圆描边路径
                 gb = new GlassBorderDrawable(
                         0, borderTop, borderBottom, info.radius, borderWidthPx,
                         GlassBorderDrawable.MODE_DIAGONAL, true);
@@ -294,8 +328,8 @@ public class KeyEffectsHelper {
             }
 
             Drawable glassFg;
-            if (info.hInset > 0 || info.vInset > 0) {
-                glassFg = new InsetDrawable(gb, info.hInset, info.vInset, info.hInset, info.vInset);
+            if (useH > 0 || useV > 0) {
+                glassFg = new InsetDrawable(gb, useH, useV, useH, useV);
             } else {
                 glassFg = gb;
             }
