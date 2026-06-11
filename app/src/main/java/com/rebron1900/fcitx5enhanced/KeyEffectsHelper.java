@@ -12,6 +12,7 @@ import android.view.ViewTreeObserver;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.WeakHashMap;
 
 /** 按键 + 弹窗 半透明磨砂效果。 */
 public class KeyEffectsHelper {
@@ -20,6 +21,9 @@ public class KeyEffectsHelper {
     private static ViewTreeObserver.OnGlobalLayoutListener mKeyLayoutListener;
     private static ViewTreeObserver.OnGlobalLayoutListener mPopupLayoutListener;
     private static int mPopupAlpha = 120;
+
+    /** 保存每个按键的原始 foreground（press highlight），防止重绘时嵌套叠加。 */
+    private static final WeakHashMap<View, Drawable> sOriginalForegrounds = new WeakHashMap<>();
 
     public static void apply(View inputView, MainHook.Config c, boolean isDark) {
         mPopupAlpha = Math.min(c.alpha + 80, 180);
@@ -209,7 +213,8 @@ public class KeyEffectsHelper {
         return new KeyBgInfo(r, hInset, vInset);
     }
 
-    /** 给单个按键套上 InsetDrawable + GlassBorderDrawable 作为 foreground，保留原有 press highlight。 */
+    /** 给单个按键套上 InsetDrawable + GlassBorderDrawable 作为 foreground，保留原有 press highlight。
+     *  用 WeakHashMap 缓存原始 foreground，避免每次重绘层叠嵌套（"循环描边" bug）。 */
     private static void applyKeyGlassBorder(View keyView, MainHook.Config c, boolean isDark) {
         try {
             float den = keyView.getResources().getDisplayMetrics().density;
@@ -240,11 +245,16 @@ public class KeyEffectsHelper {
                 glassFg = gb;
             }
 
-            // 与原 foreground（press highlight）叠层，不丢失按键反馈
-            Drawable existingFg = keyView.getForeground();
-            if (existingFg != null) {
+            // 用缓存的原始 foreground（仅 press highlight），避免嵌套叠加
+            Drawable originalFg = sOriginalForegrounds.get(keyView);
+            if (originalFg == null) {
+                originalFg = keyView.getForeground();
+                sOriginalForegrounds.put(keyView, originalFg);
+            }
+
+            if (originalFg != null) {
                 android.graphics.drawable.LayerDrawable ld = new android.graphics.drawable.LayerDrawable(
-                        new Drawable[]{glassFg, existingFg});
+                        new Drawable[]{glassFg, originalFg});
                 keyView.setForeground(ld);
             } else {
                 keyView.setForeground(glassFg);
