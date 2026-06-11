@@ -2,7 +2,7 @@
 
 <div align="center">
 
-一个 LSPosed 模块，为 [fcitx5-android](https://github.com/fxliang/fcitx5-android)（fx 版）提供**键盘背景美化**与**快捷工具**。
+一个 LSPosed 模块，为 [fcitx5-android](https://github.com/fxliang/fcitx5-android)（fx 版）提供**键盘背景美化**、**按键描边**与**快捷工具**。
 
 ![Platform](https://img.shields.io/badge/platform-Android_12%2B-brightgreen)
 ![LSPosed](https://img.shields.io/badge/LSPosed-required-blue)
@@ -23,10 +23,18 @@
 - 描边颜色**自动推导自主题背景色**
 - **暗色主题自适应**（浅色/深色主题自动切换风格）
 
+**✨ 按键玻璃描边** (v1.3.0)
+- 每个按键**左上↔右下对角线渐变描边**，模拟玻璃反光质感
+- **内描边**设计：描边位于按键视觉区域内部，不撑大按键
+- **自动对齐**：描边的圆角与边距从小企鹅主题配置读取，与输入法按键完全一致
+- **主题实时跟随**：切换暗色/亮色主题，描边透明度自动适配
+- 支持插件开关，无需也可关闭
+
 **🎛️ 可配置参数**（设置界面实时调节）
 - 模糊半径 (0–100)
 - 背景透明度 (0–255)
 - 圆角半径 (0–48)
+- **按键描边开关** (v1.3.0)
 
 **⌨️ 快捷工具栏**
 - **左下角**：IME 切换按钮 → 弹出系统输入法选择列表
@@ -53,6 +61,8 @@
 2. 在 LSPosed 中激活模块，作用域勾选 `org.fcitx.fcitx5.android.fx`
 3. 重启 fcitx5 进程（或重启设备）
 4. 在桌面应用列表中找到 **Fcitx5 增强配置**，调节参数
+
+> 升级新版本前需**先卸载旧版 APK**（签名冲突），再安装新版。
 
 ## 从源码编译
 
