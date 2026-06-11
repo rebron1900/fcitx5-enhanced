@@ -35,6 +35,7 @@ public class GlassBorderDrawable extends Drawable {
     private final int mTopBorderColor;
     private final int mBottomBorderColor;
     private final int mMode;
+    private final boolean mIsOval;
 
     // ── 弹窗模式 ──
     private final Path mPopupPath = new Path();
@@ -64,17 +65,25 @@ public class GlassBorderDrawable extends Drawable {
     public GlassBorderDrawable(int fillColor, int topBorderColor, int bottomBorderColor,
                                float cornerRadiusPx, float borderWidthPx) {
         this(fillColor, topBorderColor, bottomBorderColor,
-                cornerRadiusPx, borderWidthPx, MODE_POPUP);
+                cornerRadiusPx, borderWidthPx, MODE_POPUP, false);
     }
 
     /** 指定模式 */
     public GlassBorderDrawable(int fillColor, int topBorderColor, int bottomBorderColor,
                                float cornerRadiusPx, float borderWidthPx, int mode) {
+        this(fillColor, topBorderColor, bottomBorderColor,
+                cornerRadiusPx, borderWidthPx, mode, false);
+    }
+
+    /** 指定模式 + 是否椭圆 */
+    public GlassBorderDrawable(int fillColor, int topBorderColor, int bottomBorderColor,
+                               float cornerRadiusPx, float borderWidthPx, int mode, boolean isOval) {
         mRadius = cornerRadiusPx;
         mBorderWidth = borderWidthPx;
         mTopBorderColor = topBorderColor;
         mBottomBorderColor = bottomBorderColor;
         mMode = mode;
+        mIsOval = isOval;
 
         mFillPaint.setColor(fillColor);
         mFillPaint.setStyle(Paint.Style.FILL);
@@ -163,10 +172,17 @@ public class GlassBorderDrawable extends Drawable {
     private void buildDiagonal(Rect bounds) {
         // 全圆角矩形（inset=borderWidth），描边完全在内部
         float inset = mBorderWidth;
-        mDgFullPath.addRoundRect(
-                bounds.left + inset, bounds.top + inset,
-                bounds.right - inset, bounds.bottom - inset,
-                mRadius, mRadius, Path.Direction.CW);
+        if (mIsOval) {
+            mDgFullPath.addOval(
+                    bounds.left + inset, bounds.top + inset,
+                    bounds.right - inset, bounds.bottom - inset,
+                    Path.Direction.CW);
+        } else {
+            mDgFullPath.addRoundRect(
+                    bounds.left + inset, bounds.top + inset,
+                    bounds.right - inset, bounds.bottom - inset,
+                    mRadius, mRadius, Path.Direction.CW);
+        }
 
         // 中间衰减色（15%透明度），右下角（50%透明度）
         int a = Color.alpha(mTopBorderColor);
@@ -261,7 +277,11 @@ public class GlassBorderDrawable extends Drawable {
 
     @Override
     public void getOutline(Outline outline) {
-        outline.setRoundRect(getBounds(), mRadius);
+        if (mIsOval) {
+            outline.setOval(getBounds());
+        } else {
+            outline.setRoundRect(getBounds(), mRadius);
+        }
     }
 
     @Override

@@ -281,12 +281,17 @@ public class KeyEffectsHelper {
             // 从实际 drawable 链解析圆角/形状/边距（不依赖 SP）
             KeyBgInfo info = parseKeyBg(keyView.getBackground(), keyView.getContext(), den);
 
-            // 椭圆按键（回车键等）跳过描边，避免圆角矩形路径对不上
-            if (info.isOval) return;
-
-            GlassBorderDrawable gb = new GlassBorderDrawable(
-                    0, borderTop, borderBottom, info.radius, borderWidthPx,
-                    GlassBorderDrawable.MODE_DIAGONAL);
+            GlassBorderDrawable gb;
+            if (info.isOval) {
+                // 椭圆按键（回车键）：使用椭圆描边路径
+                gb = new GlassBorderDrawable(
+                        0, borderTop, borderBottom, info.radius, borderWidthPx,
+                        GlassBorderDrawable.MODE_DIAGONAL, true);
+            } else {
+                gb = new GlassBorderDrawable(
+                        0, borderTop, borderBottom, info.radius, borderWidthPx,
+                        GlassBorderDrawable.MODE_DIAGONAL, false);
+            }
 
             Drawable glassFg;
             if (info.hInset > 0 || info.vInset > 0) {
