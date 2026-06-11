@@ -172,45 +172,92 @@ public class KeyEffectsHelper {
         }
     }
 
-    /** 从 appearanceView 的背景读取 layer insets，圆角从 fcitx5 主题配置读。 */
+    /** 从 actual drawable 链解析：边距（InsetDrawable/LayerDrawable）、圆角（GradientDrawable）、形状（oval/rect）。 */
     private static class KeyBgInfo {
         float radius;
         int hInset;
         int vInset;
-        KeyBgInfo(float r, int h, int v) { radius = r; hInset = h; vInset = v; }
+        boolean isOval;
+        KeyBgInfo(float r, int h, int v, boolean oval) { radius = r; hInset = h; vInset = v; isOval = oval; }
     }
 
-    /** 从 background LayerDrawable 解析 insets，从 SharedPreferences 读 key_radius。 */
+    /** 遍历 drawable 链（InsetDrawable → LayerDrawable → GradientDrawable），
+     *  从最内层提取实际圆角和形状，从各层累计边距。不再依赖 key_radius SP。 */
     private static KeyBgInfo parseKeyBg(Drawable bg, Context ctx, float den) {
         int hInset = 0, vInset = 0;
-        float r;
+        float radius = 0f;
+        boolean isOval = false;
 
-        // 圆角从 fcitx5 主题配置读
-        int kr = 4;
-        try {
-            SharedPreferences sp = ctx.getSharedPreferences(
-                    "org.fcitx.fcitx5.android.fx_preferences", Context.MODE_PRIVATE);
-            kr = sp.getInt("key_radius", 4);
-            if (kr < 0) kr = 0;
-            if (kr > 48) kr = 48;
-        } catch (Exception ignored) {}
-        r = Math.max(kr * den, 2f * den);
-
-        // insets 从 LayerDrawable 的 layer 实际渲染 inset 读
-        if (bg instanceof android.graphics.drawable.LayerDrawable) {
-            android.graphics.drawable.LayerDrawable ld = (android.graphics.drawable.LayerDrawable) bg;
-            for (int i = 0; i < ld.getNumberOfLayers(); i++) {
-                int inL = ld.getLayerInsetLeft(i);
-                int inT = ld.getLayerInsetTop(i);
-                int inR = ld.getLayerInsetRight(i);
-                int inB = ld.getLayerInsetBottom(i);
+        // 逐层剥离 wrapper drawable
+        Drawable d = bg;
+        while (d != null) {
+            if (d instanceof android.graphics.drawable.InsetDrawable) {
+                android.graphics.drawable.InsetDrawable id = (android.graphics.drawable.InsetDrawable) d;
+                android.graphics.Rect pad = new android.graphics.Rect();
+                id.getPadding(pad);
+                hInset = Math.max(hInset, pad.left);
+                vInset = Math.max(vInset, pad.top);
+                d = id.getDrawable();
+            } else if (d instanceof android.graphics.drawable.LayerDrawable) {
+                android.graphics.drawable.LayerDrawable ld = (android.graphics.drawable.LayerDrawable) d;
+                // 取最后一层（key 着色层）的 inset
+                int last = ld.getNumberOfLayers() - 1;
+                int inL = ld.getLayerInsetLeft(last);
+                int inT = ld.getLayerInsetTop(last);
+                int inR = ld.getLayerInsetRight(last);
+                int inB = ld.getLayerInsetBottom(last);
                 if (inL == inR && inT == inB) {
                     hInset = Math.max(hInset, inL);
                     vInset = Math.max(vInset, inT);
                 }
+                d = ld.getDrawable(last);
+            } else if (d instanceof android.graphics.drawable.GradientDrawable) {
+                android.graphics.drawable.GradientDrawable gd = (android.graphics.drawable.GradientDrawable) d;
+                // 检查形状：OVAL 就标记跳过
+                try {
+                    java.lang.reflect.Field shapeField = android.graphics.drawable.GradientDrawable.class
+                            .getDeclaredField("mShape");
+                    shapeField.setAccessible(true);
+                    int shape = shapeField.getInt(gd);
+                    isOval = (shape == android.graphics.drawable.GradientDrawable.OVAL);
+                } catch (Exception ignored) {}
+                // 读实际圆角半径
+                if (Build.VERSION.SDK_INT >= 29) {
+                    float[] radii = gd.getCornerRadii();
+                    if (radii != null && radii.length > 0 && radii[0] > 0) {
+                        radius = radii[0];
+                    }
+                }
+                // API <29 反射读 mRadius（所有角统一圆角时用）
+                if (radius == 0) {
+                    try {
+                        java.lang.reflect.Field rField = android.graphics.drawable.GradientDrawable.class
+                                .getDeclaredField("mRadius");
+                        rField.setAccessible(true);
+                        float fr = rField.getFloat(gd);
+                        if (fr > 0) radius = fr;
+                    } catch (Exception ignored) {}
+                }
+                break; // 最内层，停止
+            } else {
+                break;
             }
         }
-        return new KeyBgInfo(r, hInset, vInset);
+
+        // 兜底：从 SP 读 key_radius（仅当 drawable 链解析不到时）
+        if (radius == 0 && !isOval) {
+            int kr = 4;
+            try {
+                android.content.SharedPreferences sp = ctx.getSharedPreferences(
+                        "org.fcitx.fcitx5.android.fx_preferences", Context.MODE_PRIVATE);
+                kr = sp.getInt("key_radius", 4);
+                if (kr < 0) kr = 0;
+                if (kr > 48) kr = 48;
+            } catch (Exception ignored) {}
+            radius = Math.max(kr * den, 2f * den);
+        }
+
+        return new KeyBgInfo(radius, hInset, vInset, isOval);
     }
 
     /** 给单个按键套上 InsetDrawable + GlassBorderDrawable 作为 foreground，保留原有 press highlight。
@@ -231,8 +278,11 @@ public class KeyEffectsHelper {
                 borderWidthPx = 0.8f * den;
             }
 
-            // 从 background LayerDrawable 解析 insets，圆角从主题配置读
+            // 从实际 drawable 链解析圆角/形状/边距（不依赖 SP）
             KeyBgInfo info = parseKeyBg(keyView.getBackground(), keyView.getContext(), den);
+
+            // 椭圆按键（回车键等）跳过描边，避免圆角矩形路径对不上
+            if (info.isOval) return;
 
             GlassBorderDrawable gb = new GlassBorderDrawable(
                     0, borderTop, borderBottom, info.radius, borderWidthPx,
