@@ -26,7 +26,6 @@ import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam;
 public class MainHook extends XposedModule {
 
     private static final String TAG = "Fcitx5Enh";
-    private static final String PKG = "org.fcitx.fcitx5.android.fx";
     private static final String CLS_SVC = "org.fcitx.fcitx5.android.input.FcitxInputMethodService";
     private static final String CLS_IV = "org.fcitx.fcitx5.android.input.InputView";
 
@@ -43,6 +42,7 @@ public class MainHook extends XposedModule {
     }
 
     private Config cfg = new Config();
+    private Variant variant;
     private boolean receiverRegistered;
     private android.content.BroadcastReceiver mReceiver;
     private View mCurrentInputView;
@@ -55,8 +55,9 @@ public class MainHook extends XposedModule {
 
     @Override
     public void onPackageReady(PackageReadyParam param) {
-        if (!PKG.equals(param.getPackageName())) return;
-        Log.i(TAG, "init");
+        variant = VariantResolver.resolve(param.getPackageName());
+        if (variant == null) return;
+        Log.i(TAG, "init pkg=" + param.getPackageName() + " variant=" + variant.getClass().getSimpleName());
 
         try {
             Class<?> svc = Class.forName(CLS_SVC, true, param.getClassLoader());
@@ -96,10 +97,12 @@ public class MainHook extends XposedModule {
             cfg.alpha = sp.getInt("bg_alpha", 60);
             cfg.corner = sp.getInt("corner_radius", 20);
             cfg.toolbar = cfg.corner;
-            cfg.voice = sp.getBoolean("voice_enabled", true);
             cfg.leftBtn = sp.getBoolean("show_left_button", true);
             cfg.rightBtn = sp.getBoolean("show_right_button", true);
             cfg.keyBorder = sp.getBoolean("key_border", true);
+            // 语音：variant 不支持时强制关闭
+            cfg.voice = variant != null && variant.hasVoice()
+                    && sp.getBoolean("voice_enabled", true);
             Log.i(TAG, "read from fcitx5 SP: L=" + cfg.leftBtn + " R=" + cfg.rightBtn + " V=" + cfg.voice + " K=" + cfg.keyBorder);
         } catch (Throwable t) {
             Log.w(TAG, "readConfig SP failed: " + t);
@@ -239,7 +242,8 @@ public class MainHook extends XposedModule {
                             Log.w(TAG, "save to fcitx5 SP failed: " + t);
                         }
 
-                        cfg.leftBtn = bL; cfg.rightBtn = bR; cfg.voice = bV;
+                        cfg.leftBtn = bL; cfg.rightBtn = bR;
+                        cfg.voice = variant != null && variant.hasVoice() && bV;
                         cfg.blur = bB; cfg.alpha = bA; cfg.corner = bC; cfg.toolbar = bC; cfg.keyBorder = bK;
                         View curView = mCurrentInputView;
                         if (curView != null) curView.post(() -> applyAllEffects(curView));
@@ -348,7 +352,8 @@ public class MainHook extends XposedModule {
                 try {
                     cfg.leftBtn = c.getInt(c.getColumnIndexOrThrow("show_left_button")) != 0;
                     cfg.rightBtn = c.getInt(c.getColumnIndexOrThrow("show_right_button")) != 0;
-                    cfg.voice = c.getInt(c.getColumnIndexOrThrow("voice_enabled")) != 0;
+                    cfg.voice = variant != null && variant.hasVoice()
+                            && c.getInt(c.getColumnIndexOrThrow("voice_enabled")) != 0;
                     cfg.keyBorder = c.getInt(c.getColumnIndexOrThrow("key_border")) != 0;
                     cfg.blur = c.getInt(c.getColumnIndexOrThrow("blur_radius"));
                     cfg.alpha = c.getInt(c.getColumnIndexOrThrow("bg_alpha"));
@@ -373,7 +378,7 @@ public class MainHook extends XposedModule {
 
     @Override
     public void onPackageLoaded(PackageLoadedParam p) {
-        if (PKG.equals(p.getPackageName())) {
+        if (variant != null && variant.packageName().equals(p.getPackageName())) {
             Log.i(TAG, "pkg_loaded " + p.getPackageName());
         }
     }

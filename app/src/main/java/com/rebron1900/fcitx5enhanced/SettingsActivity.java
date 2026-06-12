@@ -41,6 +41,16 @@ public class SettingsActivity extends Activity {
         swRight = findViewById(R.id.sw_right_btn);
         swKeyBorder = findViewById(R.id.sw_key_border);
 
+        // 语音：仅 fx 版支持，官方版隐藏
+        boolean voiceSupported = isPackageInstalled(FxVariant.PACKAGE);
+        if (!voiceSupported) {
+            swVoice.setVisibility(View.GONE);
+            // 隐藏语音所在行的父容器
+            View voiceRow = swVoice.getParent() instanceof View
+                    ? (View) swVoice.getParent() : null;
+            if (voiceRow != null) voiceRow.setVisibility(View.GONE);
+        }
+
         applyTheme();
 
         SeekBar.OnSeekBarChangeListener listener = new SeekBar.OnSeekBarChangeListener() {
@@ -141,6 +151,15 @@ public class SettingsActivity extends Activity {
     }
 
     private float dp(int dp) { return dp * getResources().getDisplayMetrics().density; }
+
+    private boolean isPackageInstalled(String pkg) {
+        try {
+            getPackageManager().getPackageInfo(pkg, 0);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
 
     // ══════════════════════════════════════════
     //  持久化：本地 SP ← → 跨进程同步
