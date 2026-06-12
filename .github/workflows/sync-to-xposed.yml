@@ -1,0 +1,106 @@
+name: Sync to Xposed-Modules-Repo
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get release info
+        id: info
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get the release that triggered this workflow
+          RESPONSE=$(curl -sf \
+            -H "Authorization: token ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "${{ github.event.release.url }}")
+
+          TAG=$(echo "$RESPONSE" | jq -r '.tag_name')
+          NAME=$(echo "$RESPONSE" | jq -r '.name')
+          BODY=$(echo "$RESPONSE" | jq -r '.body')
+          ASSET_URL=$(echo "$RESPONSE" | jq -r '.assets[0].browser_download_url')
+          ASSET_NAME=$(echo "$RESPONSE" | jq -r '.assets[0].name')
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "body=$BODY" >> "$GITHUB_OUTPUT"
+          echo "asset_url=$ASSET_URL" >> "$GITHUB_OUTPUT"
+          echo "asset_name=$ASSET_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Download APK
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          curl -fSL \
+            -H "Authorization: token ${GH_TOKEN}" \
+            "${{ steps.info.outputs.asset_url }}" \
+            -o "${{ steps.info.outputs.asset_name }}"
+
+      - name: Sync to Xposed repo
+        env:
+          XPOSED_PAT: ${{ secrets.XPOSED_PAT }}
+        run: |
+          # Delete old releases
+          EXISTING_RELEASES=$(curl -sf \
+            -H "Authorization: token ${XPOSED_PAT}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/Xposed-Modules-Repo/com.rebron1900.fcitx5enhanced/releases" | \
+            jq -r '.[].id')
+
+          for RELEASE_ID in $EXISTING_RELEASES; do
+            curl -sf \
+              -X DELETE \
+              -H "Authorization: token ${XPOSED_PAT}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/Xposed-Modules-Repo/com.rebron1900.fcitx5enhanced/releases/${RELEASE_ID}"
+          done
+
+          # Delete old tags
+          EXISTING_TAGS=$(curl -sf \
+            -H "Authorization: token ${XPOSED_PAT}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/Xposed-Modules-Repo/com.rebron1900.fcitx5enhanced/tags" | \
+            jq -r '.[].name')
+
+          for TAG in $EXISTING_TAGS; do
+            # Delete tag reference
+            GIT_REF=$(echo "$TAG" | sed 's/\//_/g')
+            curl -sf \
+              -X DELETE \
+              -H "Authorization: token ${XPOSED_PAT}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/Xposed-Modules-Repo/com.rebron1900.fcitx5enhanced/git/refs/tags/${TAG}" 2>/dev/null || true
+          done
+
+          # Create new release
+          RELEASE_RESPONSE=$(curl -sf \
+            -X POST \
+            -H "Authorization: token ${XPOSED_PAT}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/Xposed-Modules-Repo/com.rebron1900.fcitx5enhanced/releases" \
+            -d "{
+              \"tag_name\": \"${{ steps.info.outputs.tag }}\",
+              \"name\": \"${{ steps.info.outputs.name }}\",
+              \"body\": $(echo '${{ steps.info.outputs.body }}' | jq -Rs .),
+              \"draft\": false,
+              \"prerelease\": false
+            }")
+
+          NEW_RELEASE_ID=$(echo "$RELEASE_RESPONSE" | jq -r '.id')
+          echo "Created release: $NEW_RELEASE_ID"
+
+          # Upload APK asset
+          curl -sf \
+            -X POST \
+            -H "Authorization: token ${XPOSED_PAT}" \
+            -H "Content-Type: application/vnd.android.package-archive" \
+            "https://uploads.github.com/repos/Xposed-Modules-Repo/com.rebron1900.fcitx5enhanced/releases/${NEW_RELEASE_ID}/assets?name=${{ steps.info.outputs.asset_name }}" \
+            --data-binary @${{ steps.info.outputs.asset_name }}
