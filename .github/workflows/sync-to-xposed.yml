@@ -19,28 +19,29 @@ jobs:
         run: |
           # Get the release — use event payload if available, otherwise latest
           if [ -n "${{ github.event.release.url }}" ]; then
-            RESPONSE=$(curl -sf \
+            curl -sf \
               -H "Authorization: token ${GH_TOKEN}" \
               -H "Accept: application/vnd.github.v3+json" \
-              "${{ github.event.release.url }}")
+              "${{ github.event.release.url }}" > /tmp/release.json
           else
-            RESPONSE=$(curl -sf \
+            curl -sf \
               -H "Authorization: token ${GH_TOKEN}" \
               -H "Accept: application/vnd.github.v3+json" \
-              "https://api.github.com/repos/${{ github.repository }}/releases/latest")
+              "https://api.github.com/repos/${{ github.repository }}/releases/latest" > /tmp/release.json
           fi
 
-          TAG=$(echo "$RESPONSE" | jq -r '.tag_name')
-          NAME=$(echo "$RESPONSE" | jq -r '.name')
-          BODY=$(echo "$RESPONSE" | jq -r '.body')
-          ASSET_URL=$(echo "$RESPONSE" | jq -r '.assets[0].browser_download_url')
-          ASSET_NAME=$(echo "$RESPONSE" | jq -r '.assets[0].name')
+          # Extract scalar fields to GITHUB_OUTPUT
+          TAG=$(jq -r '.tag_name' /tmp/release.json)
+          NAME=$(jq -r '.name' /tmp/release.json)
+          ASSET_URL=$(jq -r '.assets[0].browser_download_url' /tmp/release.json)
+          ASSET_NAME=$(jq -r '.assets[0].name' /tmp/release.json)
 
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
-          echo "body=$BODY" >> "$GITHUB_OUTPUT"
           echo "asset_url=$ASSET_URL" >> "$GITHUB_OUTPUT"
           echo "asset_name=$ASSET_NAME" >> "$GITHUB_OUTPUT"
+
+          echo "Release: $TAG — $NAME"
 
       - name: Download APK
         env:
@@ -50,53 +51,54 @@ jobs:
             -H "Authorization: token ${GH_TOKEN}" \
             "${{ steps.info.outputs.asset_url }}" \
             -o "${{ steps.info.outputs.asset_name }}"
+          ls -lh "${{ steps.info.outputs.asset_name }}"
 
       - name: Sync to Xposed repo
         env:
           XPOSED_PAT: ${{ secrets.XPOSED_PAT }}
         run: |
-          # Delete old releases
-          EXISTING_RELEASES=$(curl -sf \
+          XPOSED_REPO="Xposed-Modules-Repo/com.rebron1900.fcitx5enhanced"
+          TAG="${{ steps.info.outputs.tag }}"
+
+          # Delete all existing releases
+          EXISTING=$(curl -sf \
             -H "Authorization: token ${XPOSED_PAT}" \
             -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/Xposed-Modules-Repo/com.rebron1900.fcitx5enhanced/releases" | \
-            jq -r '.[].id')
-
-          for RELEASE_ID in $EXISTING_RELEASES; do
-            curl -sf \
-              -X DELETE \
+            "https://api.github.com/repos/${XPOSED_REPO}/releases")
+          
+          echo "$EXISTING" | jq -r '.[].id' | while read -r RID; do
+            curl -sf -X DELETE \
               -H "Authorization: token ${XPOSED_PAT}" \
               -H "Accept: application/vnd.github.v3+json" \
-              "https://api.github.com/repos/Xposed-Modules-Repo/com.rebron1900.fcitx5enhanced/releases/${RELEASE_ID}"
+              "https://api.github.com/repos/${XPOSED_REPO}/releases/${RID}"
+            echo "Deleted release $RID"
           done
 
-          # Delete old tags
+          # Delete all existing tags
           EXISTING_TAGS=$(curl -sf \
             -H "Authorization: token ${XPOSED_PAT}" \
             -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/Xposed-Modules-Repo/com.rebron1900.fcitx5enhanced/tags" | \
-            jq -r '.[].name')
-
-          for TAG in $EXISTING_TAGS; do
-            # Delete tag reference
-            GIT_REF=$(echo "$TAG" | sed 's/\//_/g')
-            curl -sf \
-              -X DELETE \
+            "https://api.github.com/repos/${XPOSED_REPO}/tags")
+          
+          echo "$EXISTING_TAGS" | jq -r '.[].name' | while read -r T; do
+            curl -sf -X DELETE \
               -H "Authorization: token ${XPOSED_PAT}" \
               -H "Accept: application/vnd.github.v3+json" \
-              "https://api.github.com/repos/Xposed-Modules-Repo/com.rebron1900.fcitx5enhanced/git/refs/tags/${TAG}" 2>/dev/null || true
+              "https://api.github.com/repos/${XPOSED_REPO}/git/refs/tags/${T}" 2>/dev/null || true
+            echo "Deleted tag $T"
           done
 
-          # Create new release
+          # Create new release with body from file (avoids $GITHUB_OUTPUT multi-line issues)
+          BODY_JSON=$(jq -c '.body' /tmp/release.json)
           RELEASE_RESPONSE=$(curl -sf \
             -X POST \
             -H "Authorization: token ${XPOSED_PAT}" \
             -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/Xposed-Modules-Repo/com.rebron1900.fcitx5enhanced/releases" \
+            "https://api.github.com/repos/${XPOSED_REPO}/releases" \
             -d "{
-              \"tag_name\": \"${{ steps.info.outputs.tag }}\",
+              \"tag_name\": \"${TAG}\",
               \"name\": \"${{ steps.info.outputs.name }}\",
-              \"body\": $(echo '${{ steps.info.outputs.body }}' | jq -Rs .),
+              \"body\": ${BODY_JSON},
               \"draft\": false,
               \"prerelease\": false
             }")
@@ -109,5 +111,7 @@ jobs:
             -X POST \
             -H "Authorization: token ${XPOSED_PAT}" \
             -H "Content-Type: application/vnd.android.package-archive" \
-            "https://uploads.github.com/repos/Xposed-Modules-Repo/com.rebron1900.fcitx5enhanced/releases/${NEW_RELEASE_ID}/assets?name=${{ steps.info.outputs.asset_name }}" \
+            "https://uploads.github.com/repos/${XPOSED_REPO}/releases/${NEW_RELEASE_ID}/assets?name=${{ steps.info.outputs.asset_name }}" \
             --data-binary @${{ steps.info.outputs.asset_name }}
+
+          echo "Sync complete: https://github.com/${XPOSED_REPO}/releases/tag/${TAG}"
