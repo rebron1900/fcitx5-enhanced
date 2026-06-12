@@ -58,6 +58,7 @@
 ## 安装
 
 1. 下载最新 [Release APK](https://github.com/rebron1900/fcitx5-enhanced/releases)
+   - 也可通过 [Xposed Modules Repo](https://github.com/Xposed-Modules-Repo/com.rebron1900.fcitx5enhanced) 获取
 2. 在 LSPosed 中激活模块，作用域勾选 `org.fcitx.fcitx5.android.fx`
 3. 重启 fcitx5 进程（或重启设备）
 4. 在桌面应用列表中找到 **Fcitx5 增强配置**，调节参数
