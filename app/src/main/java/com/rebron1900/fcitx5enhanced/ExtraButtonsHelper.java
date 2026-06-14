@@ -120,8 +120,10 @@ public class ExtraButtonsHelper {
                 });
             }
 
-            // ── 中: 语音波形线 ──
-            if (c.voice) {
+            // ── 中: 语音波形线（原版无 RECORD_AUDIO 权限，跳过）──
+            String pkg = inputView.getContext().getPackageName();
+            boolean isOriginal = "org.fcitx.fcitx5.android".equals(pkg);
+            if (c.voice && !isOriginal) {
                 final WaveformLineView waveView = new WaveformLineView(ctx);
                 waveView.setTag("frosted_btn_voice");
                 waveView.setContentDescription("语音输入");

@@ -26,14 +26,13 @@ public class PreeditHelper {
 
     public static void apply(View inputView, MainHook.Config c) {
         try {
-            Field pf = inputView.getClass().getDeclaredField("preedit");
-            pf.setAccessible(true);
-            Object preeditComp = pf.get(inputView);
-            Method getUi = preeditComp.getClass().getMethod("getUi");
-            Object preeditUi = getUi.invoke(preeditComp);
-            Method getRoot = preeditUi.getClass().getMethod("getRoot");
-            final View preeditRoot = (View) getRoot.invoke(preeditUi);
-            if (preeditRoot == null) return;
+            // 查找 preedit root：InputView 的直接子 View，包含 TextView（preedit 文本区域）
+            // 先尝试反射（靓企鹅），再遍历子 View（原版 R8 混淆后）
+            View preeditRoot = findPreeditRoot(inputView);
+            if (preeditRoot == null) {
+                Log.w(TAG, "preedit root not found");
+                return;
+            }
 
             // 读取主题色
             int bgColor = 0xFF303030;
@@ -159,5 +158,51 @@ public class PreeditHelper {
             }
         }
         return null;
+    }
+
+    /** 查找 preedit root — 先反射，再遍历子 View */
+    private static View findPreeditRoot(View inputView) {
+        // 方式1: 反射（靓企鹅未混淆）
+        try {
+            Field pf = inputView.getClass().getDeclaredField("preedit");
+            pf.setAccessible(true);
+            Object preeditComp = pf.get(inputView);
+            Method getUi = preeditComp.getClass().getMethod("getUi");
+            Object preeditUi = getUi.invoke(preeditComp);
+            Method getRoot = preeditUi.getClass().getMethod("getRoot");
+            View root = (View) getRoot.invoke(preeditUi);
+            if (root != null) {
+                Log.i(TAG, "preedit root via reflection");
+                return root;
+            }
+        } catch (Exception ignored) {}
+
+        // 方式2: 遍历 InputView 子 View，找包含 TextView 的 ViewGroup
+        // preedit root 是 InputView 的直接子 View，在 keyboardView 之上
+        if (inputView instanceof ViewGroup) {
+            ViewGroup vg = (ViewGroup) inputView;
+            for (int i = 0; i < vg.getChildCount(); i++) {
+                View child = vg.getChildAt(i);
+                // preedit root 是一个 ViewGroup，内部有 TextView
+                if (child instanceof ViewGroup && child != vg.getChildAt(vg.getChildCount() - 1)) {
+                    ViewGroup candidate = (ViewGroup) child;
+                    if (containsTextView(candidate)) {
+                        Log.i(TAG, "preedit root via child scan: index=" + i);
+                        return candidate;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /** 递归检查 ViewGroup 是否包含 TextView */
+    private static boolean containsTextView(ViewGroup vg) {
+        for (int i = 0; i < vg.getChildCount(); i++) {
+            View child = vg.getChildAt(i);
+            if (child instanceof android.widget.TextView) return true;
+            if (child instanceof ViewGroup && containsTextView((ViewGroup) child)) return true;
+        }
+        return false;
     }
 }
