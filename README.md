@@ -2,7 +2,7 @@
 
 <div align="center">
 
-一个 LSPosed 模块，为 [fcitx5-android](https://github.com/fxliang/fcitx5-android)（fx 版）提供**键盘背景美化**、**按键描边**与**快捷工具**。
+一个 LSPosed 模块，为 [fcitx5-android](https://github.com/fxliang/fcitx5-android)（原版与 BiBi-Keyboard 版）提供**键盘背景美化**、**按键描边**与**快捷工具**。
 
 ![Platform](https://img.shields.io/badge/platform-Android_12%2B-brightgreen)
 ![LSPosed](https://img.shields.io/badge/LSPosed-required-blue)
@@ -46,20 +46,22 @@
 - 集成 bibi keyboard 语音识别服务
 - 实时振幅波形反馈
 
+> ⚠️ 语音输入仅限 BiBi-Keyboard（fx 版）。原版 fcitx5-android 无录音权限，语音按钮与开关自动隐藏。
+
 ## 环境要求
 
 | 项目 | 要求 |
 |---|---|
 | 设备 | Android 12+ (API 31+) |
 | Root | [LSPosed](https://github.com/LSPosed/LSPosed) 已激活 |
-| 输入法 | [fcitx5-android](https://github.com/fxliang/fcitx5-android) fx 版 |
+| 输入法 | [fcitx5-android](https://github.com/fxliang/fcitx5-android) 或 [BiBi-Keyboard](https://github.com/BryceWG/BiBi-Keyboard) |
 | 语音（可选） | [BiBi-Keyboard（说点啥）](https://github.com/BryceWG/BiBi-Keyboard) 或兼容 AIDL 服务 |
 
 ## 安装
 
 1. 下载最新 [Release APK](https://github.com/rebron1900/fcitx5-enhanced/releases)
    - 也可通过 [Xposed Modules Repo](https://github.com/Xposed-Modules-Repo/com.rebron1900.fcitx5enhanced) 获取
-2. 在 LSPosed 中激活模块，作用域勾选 `org.fcitx.fcitx5.android.fx`
+2. 在 LSPosed 中激活模块，作用域勾选 `org.fcitx.fcitx5.android`（原版）或 `org.fcitx.fcitx5.android.fx`（BiBi-Keyboard）
 3. 重启 fcitx5 进程（或重启设备）
 4. 在桌面应用列表中找到 **Fcitx5 增强配置**，调节参数
 
@@ -86,3 +88,11 @@ cd fcitx5-enhanced
 ## 许可证
 
 [GNU General Public License v3.0](LICENSE)
+
+## 更新日志
+
+### v1.5.0
+- 支持原版 fcitx5-android（`org.fcitx.fcitx5.android`）与 BiBi-Keyboard（`org.fcitx.fcitx5.android.fx`）双包名
+- 原版运行时自动隐藏语音按钮、禁用语音开关（无录音权限）
+- 适配原版 R8 混淆：磨砂背景、预编辑、按键特效改用类型匹配与 View 遍历
+- 修复原版上配置同步问题（旧 view 引用清理）
