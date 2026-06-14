@@ -88,9 +88,11 @@ public class KeyEffectsHelper {
             }
 
             // 每次 apply 都读 SP（保证药丸设置实时生效）
+            // 动态获取包名，兼容原版和靓企鹅
             try {
+                String pkg = inputView.getContext().getPackageName();
                 SharedPreferences sp = inputView.getContext().getSharedPreferences(
-                        "org.fcitx.fcitx5.android.fx_preferences", Context.MODE_PRIVATE);
+                        pkg + "_preferences", Context.MODE_PRIVATE);
                 sKeyRadius = sp.getInt("key_radius", 4);
                 sSpecialKeyOval = sp.getBoolean("special_key_oval_shape", false);
             } catch (Exception ignored) {}
