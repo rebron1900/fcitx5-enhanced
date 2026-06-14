@@ -34,9 +34,20 @@ public class FrostedGlassHelper {
     // ══════════════════════════════════════════
     private static void applyFrostedGlass(View inputView, MainHook.Config c) {
         try {
-            Field bgField = inputView.getClass().getDeclaredField("customBackground");
+            Field bgField = null;
+            try {
+                bgField = inputView.getClass().getDeclaredField("customBackground");
+            } catch (NoSuchFieldException e) {
+                Log.w(TAG, "customBackground not found on " + inputView.getClass().getName()
+                        + ", trying superclass");
+                bgField = inputView.getClass().getSuperclass().getDeclaredField("customBackground");
+            }
             bgField.setAccessible(true);
             ImageView bg = (ImageView) bgField.get(inputView);
+            if (bg == null) {
+                Log.w(TAG, "customBackground is null");
+                return;
+            }
 
             // 读取当前主题判断 dark/light + 获取按键底色
             boolean isDark = false;

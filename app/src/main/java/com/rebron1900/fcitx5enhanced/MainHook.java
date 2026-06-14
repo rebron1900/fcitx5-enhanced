@@ -280,6 +280,7 @@ public class MainHook extends XposedModule {
                     try { v.getContext().unregisterReceiver(mReceiver); } catch (Exception ignored) {}
                     receiverRegistered = false;
                     mReceiver = null;
+                    mCurrentInputView = null;  // 清除旧引用，防止 stale view
                     v.removeOnAttachStateChangeListener(this);
                 }
             });
