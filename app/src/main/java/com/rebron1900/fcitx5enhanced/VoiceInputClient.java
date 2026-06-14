@@ -513,10 +513,11 @@ public class VoiceInputClient {
     }
 
     private void showToast(String msg) {
-        if (mService != null) {
-            mMainHandler.post(() ->
-                Toast.makeText(mService, msg, Toast.LENGTH_SHORT).show());
-        }
+        mMainHandler.post(() -> {
+            if (mService != null) {
+                Toast.makeText(mService, msg, Toast.LENGTH_SHORT).show();
+            }
+        });
     }
 
     /** 从 PCM 16bit 数据计算 RMS 归一化振幅 */
