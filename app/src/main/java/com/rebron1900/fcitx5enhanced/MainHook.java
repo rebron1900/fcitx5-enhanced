@@ -26,9 +26,13 @@ import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam;
 public class MainHook extends XposedModule {
 
     private static final String TAG = "Fcitx5Enh";
-    private static final String PKG = "org.fcitx.fcitx5.android.fx";
+    private static final String PKG_FX = "org.fcitx.fcitx5.android.fx";
+    private static final String PKG_ORIGINAL = "org.fcitx.fcitx5.android";
     private static final String CLS_SVC = "org.fcitx.fcitx5.android.input.FcitxInputMethodService";
     private static final String CLS_IV = "org.fcitx.fcitx5.android.input.InputView";
+
+    /** 当前运行的包名（用于判断是原版还是靓企鹅） */
+    private String mRunningPkg;
 
     /** 配置快照，传递给各 Helper */
     public static class Config {
@@ -55,8 +59,10 @@ public class MainHook extends XposedModule {
 
     @Override
     public void onPackageReady(PackageReadyParam param) {
-        if (!PKG.equals(param.getPackageName())) return;
-        Log.i(TAG, "init");
+        String pkg = param.getPackageName();
+        if (!PKG_FX.equals(pkg) && !PKG_ORIGINAL.equals(pkg)) return;
+        mRunningPkg = pkg;
+        Log.i(TAG, "init pkg=" + pkg);
 
         try {
             Class<?> svc = Class.forName(CLS_SVC, true, param.getClassLoader());
@@ -66,6 +72,8 @@ public class MainHook extends XposedModule {
                 View v = (View) chain.getArgs().get(0);
                 chain.proceed();
 
+                String viewName = v != null ? v.getClass().getName() : "null";
+                Log.i(TAG, "setInputView view=" + viewName);
                 if (v != null && CLS_IV.equals(v.getClass().getName())) {
                     readConfig(v);
                     if (!receiverRegistered) registerReapplyReceiver(v);
@@ -143,9 +151,20 @@ public class MainHook extends XposedModule {
         try {
             if (cfg.toolbar <= 0) return;
 
-            Field f = inputView.getClass().getDeclaredField("kawaiiBar");
-            f.setAccessible(true);
-            Object bar = f.get(inputView);
+            // 尝试多个字段名：靓企鹅用 kawaiiBar，原版可能用不同名字
+            Object bar = null;
+            for (String fieldName : new String[]{"kawaiiBar", "toolbarBar", "toolbar"}) {
+                try {
+                    Field f = inputView.getClass().getDeclaredField(fieldName);
+                    f.setAccessible(true);
+                    bar = f.get(inputView);
+                    if (bar != null) break;
+                } catch (NoSuchFieldException ignored) {}
+            }
+            if (bar == null) {
+                Log.w(TAG, "toolbar bar field not found, skip");
+                return;
+            }
             Method gv = bar.getClass().getMethod("getView");
             View toolbar = (View) gv.invoke(bar);
 
@@ -263,6 +282,7 @@ public class MainHook extends XposedModule {
                     try { v.getContext().unregisterReceiver(mReceiver); } catch (Exception ignored) {}
                     receiverRegistered = false;
                     mReceiver = null;
+                    mCurrentInputView = null;  // 清除旧引用，防止 stale view
                     v.removeOnAttachStateChangeListener(this);
                 }
             });
@@ -373,8 +393,9 @@ public class MainHook extends XposedModule {
 
     @Override
     public void onPackageLoaded(PackageLoadedParam p) {
-        if (PKG.equals(p.getPackageName())) {
-            Log.i(TAG, "pkg_loaded " + p.getPackageName());
+        String pkg = p.getPackageName();
+        if (PKG_FX.equals(pkg) || PKG_ORIGINAL.equals(pkg)) {
+            Log.i(TAG, "pkg_loaded " + pkg);
         }
     }
 }

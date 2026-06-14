@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string-array name="xposed_scope">
+        <item>org.fcitx.fcitx5.android</item>
         <item>org.fcitx.fcitx5.android.fx</item>
     </string-array>
 </resources>

@@ -120,8 +120,10 @@ public class ExtraButtonsHelper {
                 });
             }
 
-            // ── 中: 语音波形线 ──
-            if (c.voice) {
+            // ── 中: 语音波形线（原版无 RECORD_AUDIO 权限，跳过）──
+            String pkg = inputView.getContext().getPackageName();
+            boolean isOriginal = "org.fcitx.fcitx5.android".equals(pkg);
+            if (c.voice && !isOriginal) {
                 final WaveformLineView waveView = new WaveformLineView(ctx);
                 waveView.setTag("frosted_btn_voice");
                 waveView.setContentDescription("语音输入");
@@ -133,6 +135,7 @@ public class ExtraButtonsHelper {
                 final VoiceInputClient[] voiceClientRef = new VoiceInputClient[1];
 
                 waveView.setOnTouchListener((v, ev) -> {
+                    try {
                     switch (ev.getAction()) {
                         case MotionEvent.ACTION_DOWN: {
                             v.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP);
@@ -147,6 +150,10 @@ public class ExtraButtonsHelper {
                                 svc = (android.inputmethodservice.InputMethodService) sf.get(inputView);
                                 ic = svc.getCurrentInputConnection();
                             } catch (Exception ignored) {}
+                            if (svc == null) {
+                                Log.w(TAG, "voice: service is null");
+                                return true;
+                            }
                             final android.inputmethodservice.InputMethodService svcFinal = svc;
                             final InputConnection icFinal = ic;
 
@@ -169,6 +176,10 @@ public class ExtraButtonsHelper {
                         }
                     }
                     return false;
+                    } catch (Throwable t) {
+                        Log.w(TAG, "voice touch: " + t);
+                        return false;
+                    }
                 });
 
                 keyboardView.addView(waveView, new ViewGroup.LayoutParams(
