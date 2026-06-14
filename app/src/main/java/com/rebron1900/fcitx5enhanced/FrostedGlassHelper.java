@@ -13,6 +13,7 @@ import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.Window;
 import android.widget.ImageView;
@@ -34,18 +35,9 @@ public class FrostedGlassHelper {
     // ══════════════════════════════════════════
     private static void applyFrostedGlass(View inputView, MainHook.Config c) {
         try {
-            Field bgField = null;
-            try {
-                bgField = inputView.getClass().getDeclaredField("customBackground");
-            } catch (NoSuchFieldException e) {
-                Log.w(TAG, "customBackground not found on " + inputView.getClass().getName()
-                        + ", trying superclass");
-                bgField = inputView.getClass().getSuperclass().getDeclaredField("customBackground");
-            }
-            bgField.setAccessible(true);
-            ImageView bg = (ImageView) bgField.get(inputView);
+            ImageView bg = findCustomBackground(inputView);
             if (bg == null) {
-                Log.w(TAG, "customBackground is null");
+                Log.w(TAG, "customBackground ImageView not found");
                 return;
             }
 
@@ -255,11 +247,11 @@ public class FrostedGlassHelper {
             } catch (Exception ignored) {}
 
             try {
-                Field bgField = inputView.getClass().getDeclaredField("customBackground");
-                bgField.setAccessible(true);
-                View bgV = (View) bgField.get(inputView);
-                bgV.setClipToOutline(false);
-                bgV.setOutlineProvider(null);
+                ImageView bgV = findCustomBackground(inputView);
+                if (bgV != null) {
+                    bgV.setClipToOutline(false);
+                    bgV.setOutlineProvider(null);
+                }
             } catch (Exception ignored) {}
 
             Log.i(TAG, "corners: r=" + c.corner + "dp (tint-fill + kv clip)");
@@ -400,5 +392,75 @@ public class FrostedGlassHelper {
         } catch (Throwable t) {
             Log.w(TAG, "gradient border failed: " + t);
         }
+    }
+
+    // ══════════════════════════════════════════
+    //  字段查找 — R8 混淆后字段名不可靠，按类型匹配
+    // ══════════════════════════════════════════
+
+    /** 在 InputView 中查找 customBackground ImageView */
+    private static ImageView findCustomBackground(View inputView) {
+        // 方式1: 字段名匹配（靓企鹅未混淆时可用）
+        for (Class<?> c = inputView.getClass(); c != null; c = c.getSuperclass()) {
+            for (Field f : c.getDeclaredFields()) {
+                if (f.getType() == ImageView.class) {
+                    try {
+                        f.setAccessible(true);
+                        ImageView iv = (ImageView) f.get(inputView);
+                        if (iv != null && iv.getScaleType() == ImageView.ScaleType.CENTER_CROP) {
+                            Log.i(TAG, "found customBackground by field: " + f.getName());
+                            return iv;
+                        }
+                    } catch (Exception ignored) {}
+                }
+            }
+        }
+        // 方式2: 在 keyboardView 的子 View 中找 CENTER_CROP 的 ImageView
+        // customBackground 是 keyboardView(ConstraintLayout) 的第一个子 View
+        View kbView = findKeyboardView(inputView);
+        if (kbView instanceof ViewGroup) {
+            ViewGroup kb = (ViewGroup) kbView;
+            for (int i = 0; i < kb.getChildCount(); i++) {
+                View child = kb.getChildAt(i);
+                if (child instanceof ImageView) {
+                    ImageView iv = (ImageView) child;
+                    Log.i(TAG, "found ImageView in keyboardView[" + i
+                            + "] scaleType=" + iv.getScaleType());
+                    return iv;
+                }
+            }
+        }
+        // 方式3: 递归搜索整个 InputView
+        return findFirstImageView(inputView);
+    }
+
+    private static View findKeyboardView(View inputView) {
+        try {
+            java.lang.reflect.Method m = inputView.getClass().getMethod("getKeyboardView");
+            return (View) m.invoke(inputView);
+        } catch (Exception ignored) {}
+        // fallback: 遍历子 View 找非 ImageView 的 ViewGroup（keyboardView 是 ConstraintLayout）
+        if (inputView instanceof ViewGroup) {
+            ViewGroup vg = (ViewGroup) inputView;
+            for (int i = 0; i < vg.getChildCount(); i++) {
+                View child = vg.getChildAt(i);
+                if (child instanceof ViewGroup && !(child instanceof ImageView)) {
+                    return child;
+                }
+            }
+        }
+        return null;
+    }
+
+    private static ImageView findFirstImageView(View root) {
+        if (root instanceof ImageView) return (ImageView) root;
+        if (root instanceof ViewGroup) {
+            ViewGroup vg = (ViewGroup) root;
+            for (int i = 0; i < vg.getChildCount(); i++) {
+                ImageView result = findFirstImageView(vg.getChildAt(i));
+                if (result != null) return result;
+            }
+        }
+        return null;
     }
 }

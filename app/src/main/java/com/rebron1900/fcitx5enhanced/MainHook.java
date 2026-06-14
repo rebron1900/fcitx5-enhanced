@@ -72,6 +72,8 @@ public class MainHook extends XposedModule {
                 View v = (View) chain.getArgs().get(0);
                 chain.proceed();
 
+                String viewName = v != null ? v.getClass().getName() : "null";
+                Log.i(TAG, "setInputView view=" + viewName);
                 if (v != null && CLS_IV.equals(v.getClass().getName())) {
                     readConfig(v);
                     if (!receiverRegistered) registerReapplyReceiver(v);
