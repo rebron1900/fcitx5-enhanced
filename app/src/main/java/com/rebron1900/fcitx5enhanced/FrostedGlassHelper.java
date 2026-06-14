@@ -127,20 +127,30 @@ public class FrostedGlassHelper {
                         gt.setBounds(0, 0, w, h);
                         gt.draw(cnv);
                     }
-                    // 回收旧 Bitmap
+                    // 回收旧 Bitmap（仅在无自定义背景图时回收）
                     Drawable oldBg = bg.getDrawable();
-                    if (oldBg instanceof android.graphics.drawable.BitmapDrawable) {
-                        Bitmap oldBmp = ((android.graphics.drawable.BitmapDrawable) oldBg).getBitmap();
-                        if (oldBmp != null && !oldBmp.isRecycled()) {
-                            oldBmp.recycle();
+                    boolean hasCustomImage = (oldBg instanceof android.graphics.drawable.BitmapDrawable)
+                            && ((android.graphics.drawable.BitmapDrawable) oldBg).getBitmap() != null;
+
+                    if (hasCustomImage) {
+                        // 用户有自定义背景图：保留原图，叠加半透明遮罩
+                        bg.setImageAlpha(Math.max(10, 255 - alpha));
+                        bg.setForeground(new android.graphics.drawable.ColorDrawable(
+                                Color.argb(Math.min(255, alpha / 2), 0, 0, 0)));
+                        Log.i(TAG, "✅ REAL blur=" + c.blur + " alpha=" + alpha + " (custom image preserved)");
+                    } else {
+                        // 无自定义背景图：用 tint 位图
+                        if (oldBg instanceof android.graphics.drawable.BitmapDrawable) {
+                            Bitmap oldBmp = ((android.graphics.drawable.BitmapDrawable) oldBg).getBitmap();
+                            if (oldBmp != null && !oldBmp.isRecycled()) {
+                                oldBmp.recycle();
+                            }
                         }
+                        bg.setImageBitmap(tint);
+                        bg.setScaleType(ImageView.ScaleType.FIT_XY);
+                        bg.setImageAlpha(255);
+                        Log.i(TAG, "✅ REAL blur=" + c.blur + " alpha=" + alpha + " dark=" + isDark);
                     }
-
-                    bg.setImageBitmap(tint);
-                    bg.setScaleType(ImageView.ScaleType.FIT_XY);
-                    bg.setImageAlpha(255);
-
-                    Log.i(TAG, "✅ REAL blur=" + c.blur + " alpha=" + alpha + " dark=" + isDark);
                 } else {
                     Log.w(TAG, "createBackgroundBlurDrawable returned null");
                     fallback(bg, inputView, isDark, c);
@@ -200,18 +210,27 @@ public class FrostedGlassHelper {
             base.setBounds(0, 0, w, h);
             base.draw(cnv);
 
-            // 回收旧 Bitmap
+            // 回收旧 Bitmap（仅在无自定义背景图时回收）
             Drawable oldBg = bg.getDrawable();
-            if (oldBg instanceof android.graphics.drawable.BitmapDrawable) {
-                Bitmap oldBmp = ((android.graphics.drawable.BitmapDrawable) oldBg).getBitmap();
-                if (oldBmp != null && !oldBmp.isRecycled()) {
-                    oldBmp.recycle();
-                }
-            }
+            boolean hasCustomImage = (oldBg instanceof android.graphics.drawable.BitmapDrawable)
+                    && ((android.graphics.drawable.BitmapDrawable) oldBg).getBitmap() != null;
 
-            bg.setImageBitmap(out);
-            bg.setImageAlpha(255);
-            bg.setBackground(null);
+            if (hasCustomImage) {
+                // 用户有自定义背景图：保留原图，叠加半透明遮罩
+                bg.setImageAlpha(Math.max(10, 255 - alpha));
+                bg.setForeground(new android.graphics.drawable.ColorDrawable(
+                        Color.argb(Math.min(255, alpha / 2), 0, 0, 0)));
+            } else {
+                if (oldBg instanceof android.graphics.drawable.BitmapDrawable) {
+                    Bitmap oldBmp = ((android.graphics.drawable.BitmapDrawable) oldBg).getBitmap();
+                    if (oldBmp != null && !oldBmp.isRecycled()) {
+                        oldBmp.recycle();
+                    }
+                }
+                bg.setImageBitmap(out);
+                bg.setImageAlpha(255);
+                bg.setBackground(null);
+            }
         } catch (Exception ignored) {}
     }
 
