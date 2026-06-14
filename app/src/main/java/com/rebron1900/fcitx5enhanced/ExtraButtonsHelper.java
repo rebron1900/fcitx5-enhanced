@@ -139,7 +139,8 @@ public class ExtraButtonsHelper {
                     switch (ev.getAction()) {
                         case MotionEvent.ACTION_DOWN: {
                             // 阻止父 View 抢走触摸事件（键盘滑动手势会截断长按）
-                            v.getParent().requestDisallowInterceptTouchEvent(true);
+                            ViewGroup parent = (ViewGroup) v.getParent();
+                            if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
                             v.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP);
                             if (voiceClientRef[0] != null) voiceClientRef[0].cancel();
 
@@ -173,7 +174,8 @@ public class ExtraButtonsHelper {
                         }
                         case MotionEvent.ACTION_UP:
                         case MotionEvent.ACTION_CANCEL: {
-                            v.getParent().requestDisallowInterceptTouchEvent(false);
+                            ViewGroup p2 = (ViewGroup) v.getParent();
+                            if (p2 != null) p2.requestDisallowInterceptTouchEvent(false);
                             if (voiceClientRef[0] != null) voiceClientRef[0].stopVoiceInput();
                             if (ev.getAction() == MotionEvent.ACTION_UP) v.performClick();
                             return true;
