@@ -15,6 +15,10 @@
 |:-:|:-:|:-:|
 | <img src="screenshots/screenshot-1.jpg" width="260" alt="语音调用" /> | <img src="screenshots/screenshot-2.jpg" width="260" alt="亮色模式" /> | <img src="screenshots/screenshot-3.jpg" width="260" alt="暗色模式" /> |
 
+## 主题浏览
+
+🎨 **[小企鹅主题商店](https://rebron1900.github.io/f5a-gallery/)** — 在线浏览和预览 fcitx5-android 键盘主题，支持实时键盘模拟器预览效果，一键复制或下载主题 JSON。
+
 ## 功能
 
 **🎨 键盘美化**
