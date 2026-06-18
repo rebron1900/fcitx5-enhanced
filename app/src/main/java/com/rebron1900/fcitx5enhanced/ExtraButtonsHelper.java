@@ -45,10 +45,13 @@ public class ExtraButtonsHelper {
                 if (ime == null && clip == null && wave == null) {
                     buttonsInitialized = false;
                 } else {
-                    if (ime != null) ime.setVisibility(c.leftBtn ? View.VISIBLE : View.GONE);
-                    if (clip != null) clip.setVisibility(c.rightBtn ? View.VISIBLE : View.GONE);
-                    if (wave != null) wave.setVisibility(c.voice ? View.VISIBLE : View.GONE);
-                    Log.i(TAG, "toggle btns L=" + c.leftBtn + " R=" + c.rightBtn + " V=" + c.voice);
+                    // 重新读取配置（NPatch 兼容：配置可能已更新）
+                    MainHook.Config freshCfg = MainHook.readConfigSync(inputView);
+                    
+                    if (ime != null) ime.setVisibility(freshCfg.leftBtn ? View.VISIBLE : View.GONE);
+                    if (clip != null) clip.setVisibility(freshCfg.rightBtn ? View.VISIBLE : View.GONE);
+                    if (wave != null) wave.setVisibility(freshCfg.voice ? View.VISIBLE : View.GONE);
+                    Log.i(TAG, "toggle btns L=" + freshCfg.leftBtn + " R=" + freshCfg.rightBtn + " V=" + freshCfg.voice);
                     return;
                 }
             }

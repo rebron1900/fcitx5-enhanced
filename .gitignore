@@ -13,3 +13,4 @@ release_fcitx5.keystore
 *.log
 core/
 .codegraph/
+core

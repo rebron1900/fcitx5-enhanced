@@ -86,6 +86,20 @@ public class MainHook extends XposedModule {
                 return null;
             });
 
+            // 键盘弹出时重读配置（兼容小企鹅重载按钮 + NPatch）
+            Method onWindowShown = svc.getMethod("onWindowShown");
+            hook(onWindowShown).intercept(chain -> {
+                chain.proceed();
+                View cv = mCurrentInputView;
+                if (cv != null) {
+                    cv.post(() -> {
+                        readConfig(cv);
+                        applyAllEffects(cv);
+                    });
+                }
+                return null;
+            });
+
             Log.i(TAG, "hook installed");
         } catch (Throwable t) {
             Log.e(TAG, "hook failed", t);
@@ -93,11 +107,50 @@ public class MainHook extends XposedModule {
     }
 
     // ══════════════════════════════════════════
-    //  Config
+    //  Config — 文件优先，SP 备选
     // ══════════════════════════════════════════
+
+    /** 同步读取配置（供 ExtraButtonsHelper 等外部调用） */
+    public static Config readConfigSync(View anyView) {
+        Config config = new Config();
+        try {
+            // 1. 文件优先（NPatch 兼容）
+            if (ConfigStorage.configFileExists(anyView.getContext())) {
+                Config fileCfg = ConfigStorage.readConfigFromFile(anyView.getContext());
+                config = fileCfg;
+                Log.i(TAG, "readConfigSync from file: L=" + config.leftBtn + " R=" + config.rightBtn);
+                return config;
+            }
+
+            // 2. SP 备选（LSPosed 兼容）
+            SharedPreferences sp = anyView.getContext()
+                    .getSharedPreferences("fcitx5_enhanced_config", android.content.Context.MODE_PRIVATE);
+            config.blur = sp.getInt("blur_radius", 100);
+            config.alpha = sp.getInt("bg_alpha", 60);
+            config.corner = sp.getInt("corner_radius", 20);
+            config.toolbar = config.corner;
+            config.voice = sp.getBoolean("voice_enabled", true);
+            config.leftBtn = sp.getBoolean("show_left_button", true);
+            config.rightBtn = sp.getBoolean("show_right_button", true);
+            config.keyBorder = sp.getBoolean("key_border", true);
+            Log.i(TAG, "readConfigSync from SP: L=" + config.leftBtn + " R=" + config.rightBtn);
+        } catch (Throwable t) {
+            Log.w(TAG, "readConfigSync failed: " + t);
+        }
+        return config;
+    }
 
     private void readConfig(View anyView) {
         try {
+            // 1. 文件优先（NPatch 兼容）
+            if (ConfigStorage.configFileExists(anyView.getContext())) {
+                Config fileCfg = ConfigStorage.readConfigFromFile(anyView.getContext());
+                cfg = fileCfg;
+                Log.i(TAG, "read from file: L=" + cfg.leftBtn + " R=" + cfg.rightBtn);
+                return;
+            }
+
+            // 2. SP 备选（LSPosed 兼容）
             SharedPreferences sp = anyView.getContext()
                     .getSharedPreferences("fcitx5_enhanced_config", android.content.Context.MODE_PRIVATE);
             cfg.blur = sp.getInt("blur_radius", 100);
@@ -108,9 +161,9 @@ public class MainHook extends XposedModule {
             cfg.leftBtn = sp.getBoolean("show_left_button", true);
             cfg.rightBtn = sp.getBoolean("show_right_button", true);
             cfg.keyBorder = sp.getBoolean("key_border", true);
-            Log.i(TAG, "read from fcitx5 SP: L=" + cfg.leftBtn + " R=" + cfg.rightBtn + " V=" + cfg.voice + " K=" + cfg.keyBorder);
+            Log.i(TAG, "read from SP: L=" + cfg.leftBtn + " R=" + cfg.rightBtn);
         } catch (Throwable t) {
-            Log.w(TAG, "readConfig SP failed: " + t);
+            Log.w(TAG, "readConfig failed: " + t);
             cfg = new Config();
         }
     }

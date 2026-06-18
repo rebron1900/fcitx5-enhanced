@@ -6,6 +6,7 @@ import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
@@ -151,19 +152,51 @@ public class SettingsActivity extends Activity {
     private float dp(int dp) { return dp * getResources().getDisplayMetrics().density; }
 
     // ══════════════════════════════════════════
-    //  持久化：本地 SP ← → 跨进程同步
+    //  持久化：本地 SP + fcitx5 文件双写
     // ══════════════════════════════════════════
 
-    /** 页面打开时从本地 SP 恢复。 */
+    /** 获取 fcitx5 的 Context（用于写入配置文件） */
+    private android.content.Context getFcitx5Context() {
+        for (String pkg : new String[]{"org.fcitx.fcitx5.android.fx", "org.fcitx.fcitx5.android"}) {
+            try {
+                android.content.Context ctx = createPackageContext(pkg,
+                        android.content.Context.CONTEXT_IGNORE_SECURITY);
+                Log.i("Fcitx5Enh", "getFcitx5Context: success via " + pkg);
+                return ctx;
+            } catch (Exception e) {
+                Log.w("Fcitx5Enh", "getFcitx5Context: failed for " + pkg + ": " + e);
+            }
+        }
+        return null;
+    }
+
+    /** 页面打开时从本地 SP 恢复（优先）或从文件恢复。 */
     private void loadSettings() {
         SharedPreferences sp = getPreferences(MODE_PRIVATE);
-        sbBlur.setProgress(sp.getInt("blur_radius", 100));
-        sbAlpha.setProgress(sp.getInt("bg_alpha", 60));
-        sbCorner.setProgress(sp.getInt("corner_radius", 20));
-        swVoice.setChecked(sp.getBoolean("voice_enabled", true));
-        swLeft.setChecked(sp.getBoolean("show_left_button", true));
-        swRight.setChecked(sp.getBoolean("show_right_button", true));
-        swKeyBorder.setChecked(sp.getBoolean("key_border", true));
+        
+        // 检查本地 SP 是否有数据
+        if (sp.getAll().size() > 0) {
+            sbBlur.setProgress(sp.getInt("blur_radius", 100));
+            sbAlpha.setProgress(sp.getInt("bg_alpha", 60));
+            sbCorner.setProgress(sp.getInt("corner_radius", 20));
+            swVoice.setChecked(sp.getBoolean("voice_enabled", true));
+            swLeft.setChecked(sp.getBoolean("show_left_button", true));
+            swRight.setChecked(sp.getBoolean("show_right_button", true));
+            swKeyBorder.setChecked(sp.getBoolean("key_border", true));
+        } else {
+            // 本地 SP 为空，尝试从文件读取
+            android.content.Context fcitxCtx = getFcitx5Context();
+            if (fcitxCtx != null && ConfigStorage.configFileExists(fcitxCtx)) {
+                MainHook.Config cfg = ConfigStorage.readConfigFromFile(fcitxCtx);
+                sbBlur.setProgress(cfg.blur);
+                sbAlpha.setProgress(cfg.alpha);
+                sbCorner.setProgress(cfg.corner);
+                swVoice.setChecked(cfg.voice);
+                swLeft.setChecked(cfg.leftBtn);
+                swRight.setChecked(cfg.rightBtn);
+                swKeyBorder.setChecked(cfg.keyBorder);
+            }
+        }
         updateLabels();
     }
 
@@ -173,12 +206,12 @@ public class SettingsActivity extends Activity {
         tvCorner.setText(sbCorner.getProgress() == 0 ? "关" : String.valueOf(sbCorner.getProgress()));
     }
 
-    /** 用户操作 → 本地持久化 + 跨进程同步（ContentProvider + Broadcast 双通道）。 */
+    /** 用户操作 → 本地 SP + fcitx5 文件双写 + 广播通知。 */
     private void saveAndApply() {
-        android.util.Log.i("Fcitx5Enh", "Settings saving: L=" + swLeft.isChecked()
+        Log.i("Fcitx5Enh", "Settings saving: L=" + swLeft.isChecked()
                 + " R=" + swRight.isChecked() + " V=" + swVoice.isChecked());
 
-        // 1. 本地持久化
+        // 1. 本地 SP 持久化
         getPreferences(MODE_PRIVATE).edit()
                 .putInt("blur_radius", sbBlur.getProgress())
                 .putInt("bg_alpha", sbAlpha.getProgress())
@@ -189,23 +222,15 @@ public class SettingsActivity extends Activity {
                 .putBoolean("key_border", swKeyBorder.isChecked())
                 .commit();
 
-        // 2. ContentProvider 跨进程同步（主通道，HyperOS 也不丢）
-        try {
-            android.content.ContentValues cv = new android.content.ContentValues();
-            cv.put("show_left_button", swLeft.isChecked());
-            cv.put("show_right_button", swRight.isChecked());
-            cv.put("voice_enabled", swVoice.isChecked());
-            cv.put("key_border", swKeyBorder.isChecked());
-            cv.put("blur_radius", sbBlur.getProgress());
-            cv.put("bg_alpha", sbAlpha.getProgress());
-            cv.put("corner_radius", sbCorner.getProgress());
-            android.net.Uri uri = android.net.Uri.parse("content://com.rebron1900.fcitx5enhanced.config");
-            getContentResolver().update(uri, cv, null, null);
-        } catch (Exception e) {
-            android.util.Log.w("Fcitx5Enh", "ConfigProvider write failed: " + e);
+        // 2. 写入 fcitx5 的配置文件（NPatch 兼容）
+        android.content.Context fcitxCtx = getFcitx5Context();
+        if (fcitxCtx != null) {
+            ConfigStorage.writeConfigToFile(fcitxCtx,
+                    sbBlur.getProgress(), sbAlpha.getProgress(), sbCorner.getProgress(),
+                    swVoice.isChecked(), swLeft.isChecked(), swRight.isChecked(), swKeyBorder.isChecked());
         }
 
-        // 3. 广播（备选通道，进程间直达）
+        // 3. 广播（LSPosed 快速通道）
         android.content.Intent intent = new android.content.Intent("com.rebron1900.fcitx5enhanced.UI_UPDATE");
         intent.setFlags(Intent.FLAG_RECEIVER_FOREGROUND);
         intent.putExtra("show_left_button", swLeft.isChecked());

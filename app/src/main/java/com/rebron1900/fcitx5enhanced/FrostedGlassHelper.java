@@ -129,7 +129,9 @@ public class FrostedGlassHelper {
                     }
                     // 回收旧 Bitmap（仅在无自定义背景图时回收）
                     Drawable oldBg = bg.getDrawable();
-                    boolean hasCustomImage = (oldBg instanceof android.graphics.drawable.BitmapDrawable)
+                    boolean isOurTint = Boolean.TRUE.equals(bg.getTag(R.id.tag_frosted_tint));
+                    boolean hasCustomImage = !isOurTint
+                            && (oldBg instanceof android.graphics.drawable.BitmapDrawable)
                             && ((android.graphics.drawable.BitmapDrawable) oldBg).getBitmap() != null;
 
                     if (hasCustomImage) {
@@ -137,10 +139,11 @@ public class FrostedGlassHelper {
                         bg.setImageAlpha(Math.max(10, 255 - alpha));
                         bg.setForeground(new android.graphics.drawable.ColorDrawable(
                                 Color.argb(Math.min(255, alpha / 2), 0, 0, 0)));
+                        bg.setTag(R.id.tag_frosted_tint, null);
                         Log.i(TAG, "✅ REAL blur=" + c.blur + " alpha=" + alpha + " (custom image preserved)");
                     } else {
                         // 无自定义背景图：用 tint 位图
-                        if (oldBg instanceof android.graphics.drawable.BitmapDrawable) {
+                        if (!isOurTint && oldBg instanceof android.graphics.drawable.BitmapDrawable) {
                             Bitmap oldBmp = ((android.graphics.drawable.BitmapDrawable) oldBg).getBitmap();
                             if (oldBmp != null && !oldBmp.isRecycled()) {
                                 oldBmp.recycle();
@@ -149,6 +152,8 @@ public class FrostedGlassHelper {
                         bg.setImageBitmap(tint);
                         bg.setScaleType(ImageView.ScaleType.FIT_XY);
                         bg.setImageAlpha(255);
+                        bg.setForeground(null);
+                        bg.setTag(R.id.tag_frosted_tint, Boolean.TRUE);
                         Log.i(TAG, "✅ REAL blur=" + c.blur + " alpha=" + alpha + " dark=" + isDark);
                     }
                 } else {
@@ -212,7 +217,9 @@ public class FrostedGlassHelper {
 
             // 回收旧 Bitmap（仅在无自定义背景图时回收）
             Drawable oldBg = bg.getDrawable();
-            boolean hasCustomImage = (oldBg instanceof android.graphics.drawable.BitmapDrawable)
+            boolean isOurTint = Boolean.TRUE.equals(bg.getTag(R.id.tag_frosted_tint));
+            boolean hasCustomImage = !isOurTint
+                    && (oldBg instanceof android.graphics.drawable.BitmapDrawable)
                     && ((android.graphics.drawable.BitmapDrawable) oldBg).getBitmap() != null;
 
             if (hasCustomImage) {
@@ -220,8 +227,9 @@ public class FrostedGlassHelper {
                 bg.setImageAlpha(Math.max(10, 255 - alpha));
                 bg.setForeground(new android.graphics.drawable.ColorDrawable(
                         Color.argb(Math.min(255, alpha / 2), 0, 0, 0)));
+                bg.setTag(R.id.tag_frosted_tint, null);
             } else {
-                if (oldBg instanceof android.graphics.drawable.BitmapDrawable) {
+                if (!isOurTint && oldBg instanceof android.graphics.drawable.BitmapDrawable) {
                     Bitmap oldBmp = ((android.graphics.drawable.BitmapDrawable) oldBg).getBitmap();
                     if (oldBmp != null && !oldBmp.isRecycled()) {
                         oldBmp.recycle();
@@ -230,6 +238,8 @@ public class FrostedGlassHelper {
                 bg.setImageBitmap(out);
                 bg.setImageAlpha(255);
                 bg.setBackground(null);
+                bg.setForeground(null);
+                bg.setTag(R.id.tag_frosted_tint, Boolean.TRUE);
             }
         } catch (Exception ignored) {}
     }

@@ -62,7 +62,11 @@ public class KeyEffectsHelper {
 
             // 初次应用 — 只做一次，不靠 listener
             makeKeysTranslucent(wmView, keyAlpha);
-            if (c.keyBorder) addKeyBorders(wmView, c, isDark);
+            if (c.keyBorder) {
+                addKeyBorders(wmView, c, isDark);
+            } else {
+                removeKeyBorders(wmView);
+            }
 
             // listener 只处理新增按键（如切换键盘布局时新出现的按键）
             // 不再重复 makeKeysTranslucent（alpha 不变）
@@ -70,7 +74,11 @@ public class KeyEffectsHelper {
                 if (sApplying) return;  // 防重入
                 sApplying = true;
                 try {
-                    if (c.keyBorder) addKeyBorders(wmView, c, isDark);
+                    // 重新读取配置（lambda 不能捕获旧 cfg 引用）
+                    MainHook.Config fresh = MainHook.readConfigSync(inputView);
+                    if (fresh.keyBorder) {
+                        addKeyBorders(wmView, fresh, isDark);
+                    }
                 } finally {
                     sApplying = false;
                 }
@@ -204,6 +212,31 @@ public class KeyEffectsHelper {
             } catch (Exception ignored) {}
             if (child instanceof ViewGroup) {
                 addKeyBorders((ViewGroup) child, c, isDark);
+            }
+        }
+    }
+
+    /** 移除所有按键描边（keyBorder 关闭时调用） */
+    private static void removeKeyBorders(ViewGroup root) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
+        for (int i = 0; i < root.getChildCount(); i++) {
+            View child = root.getChildAt(i);
+            try {
+                View appView = findAppearanceView(child);
+                if (appView != null) {
+                    Drawable fg = appView.getForeground();
+                    if (fg instanceof android.graphics.drawable.LayerDrawable) {
+                        android.graphics.drawable.LayerDrawable ld = (android.graphics.drawable.LayerDrawable) fg;
+                        if (ld.getNumberOfLayers() == 2 && ld.getDrawable(0) instanceof GlassBorderDrawable) {
+                            appView.setForeground(ld.getDrawable(1));
+                        }
+                    } else if (fg instanceof GlassBorderDrawable) {
+                        appView.setForeground(null);
+                    }
+                }
+            } catch (Exception ignored) {}
+            if (child instanceof ViewGroup) {
+                removeKeyBorders((ViewGroup) child);
             }
         }
     }
@@ -380,7 +413,18 @@ public class KeyEffectsHelper {
 
             Drawable originalFg = sOriginalForegrounds.get(keyView);
             if (originalFg == null) {
-                originalFg = keyView.getForeground();
+                Drawable currentFg = keyView.getForeground();
+                // 如果当前 foreground 是上次 apply 的 LayerDrawable(GlassBorder + 原始)，解包
+                if (currentFg instanceof android.graphics.drawable.LayerDrawable) {
+                    android.graphics.drawable.LayerDrawable ld = (android.graphics.drawable.LayerDrawable) currentFg;
+                    if (ld.getNumberOfLayers() == 2 && ld.getDrawable(0) instanceof GlassBorderDrawable) {
+                        originalFg = ld.getDrawable(1);
+                    } else {
+                        originalFg = currentFg;
+                    }
+                } else {
+                    originalFg = currentFg;
+                }
                 sOriginalForegrounds.put(keyView, originalFg);
             }
 
