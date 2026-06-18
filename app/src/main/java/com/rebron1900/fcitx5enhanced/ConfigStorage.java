@@ -98,4 +98,66 @@ public class ConfigStorage {
     public static boolean configFileExists(Context context) {
         return getConfigFile(context).exists();
     }
+
+    // ══════════════════════════════════════════
+    //  WebDAV 同步配置
+    // ══════════════════════════════════════════
+
+    private static final String SYNC_PREFS = "fcitx5_webdav_sync";
+    private static final String DEFAULT_WEBDAV_URL = "https://REDACTED/dav/rime-sync/";
+    private static final String DEFAULT_WEBDAV_USER = "REDACTED";
+    private static final String DEFAULT_WEBDAV_PASS = "REDACTED";
+    private static final int DEFAULT_INTERVAL = 30; // 分钟
+
+    public static boolean isWebDavEnabled(Context context) {
+        return getSyncPrefs(context).getBoolean("webdav_enabled", false);
+    }
+
+    public static String getWebDavUrl(Context context) {
+        return getSyncPrefs(context).getString("webdav_url", DEFAULT_WEBDAV_URL);
+    }
+
+    public static String getWebDavUser(Context context) {
+        return getSyncPrefs(context).getString("webdav_user", DEFAULT_WEBDAV_USER);
+    }
+
+    public static String getWebDavPass(Context context) {
+        return getSyncPrefs(context).getString("webdav_pass", DEFAULT_WEBDAV_PASS);
+    }
+
+    public static int getSyncInterval(Context context) {
+        return getSyncPrefs(context).getInt("sync_interval", DEFAULT_INTERVAL);
+    }
+
+    public static void saveWebDavConfig(Context context, boolean enabled, String url,
+                                         String user, String pass, int interval) {
+        getSyncPrefs(context).edit()
+                .putBoolean("webdav_enabled", enabled)
+                .putString("webdav_url", url)
+                .putString("webdav_user", user)
+                .putString("webdav_pass", pass)
+                .putInt("sync_interval", interval)
+                .apply();
+    }
+
+    /** 获取 RIME sync 目录 */
+    public static File getRimeSyncDir(Context context) {
+        // 通过 createPackageContext 访问 fcitx5 的 externalFilesDir
+        for (String pkg : new String[]{"org.fcitx.fcitx5.android.fx", "org.fcitx.fcitx5.android"}) {
+            try {
+                Context fcitxCtx = context.createPackageContext(pkg, Context.CONTEXT_IGNORE_SECURITY);
+                File syncDir = new File(fcitxCtx.getExternalFilesDir(null), "data/rime/sync");
+                if (!syncDir.exists()) syncDir.mkdirs();
+                return syncDir;
+            } catch (Exception ignored) {}
+        }
+        // fallback: 本应用目录
+        File fallback = new File(context.getExternalFilesDir(null), "rime-sync");
+        if (!fallback.exists()) fallback.mkdirs();
+        return fallback;
+    }
+
+    private static android.content.SharedPreferences getSyncPrefs(Context context) {
+        return context.getSharedPreferences(SYNC_PREFS, Context.MODE_PRIVATE);
+    }
 }
