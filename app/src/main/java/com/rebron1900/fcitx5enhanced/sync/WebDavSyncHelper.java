@@ -168,12 +168,18 @@ public class WebDavSyncHelper {
                 .header("Depth", "1")
                 .build();
 
+        appendLog("PROPFIND " + url);
+
         String xml;
         try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful() && response.code() != 207) {
-                throw new IOException("PROPFIND failed: " + response.code());
+            int code = response.code();
+            String respBody = response.body() != null ? response.body().string() : "";
+            appendLog("响应: HTTP " + code);
+            if (code != 207 && code != 200) {
+                appendLog("错误体: " + respBody.substring(0, Math.min(respBody.length(), 200)));
+                throw new IOException("PROPFIND failed: " + code);
             }
-            xml = response.body() != null ? response.body().string() : "";
+            xml = respBody;
         }
 
         // 解析每个 D:response
