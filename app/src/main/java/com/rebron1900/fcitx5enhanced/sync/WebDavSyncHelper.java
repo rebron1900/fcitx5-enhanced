@@ -336,16 +336,20 @@ public class WebDavSyncHelper {
     private void scanDir(File dir, String prefix, Map<String, Long> result) {
         File[] files = dir.listFiles();
         if (files == null) {
-            appendLog("扫描目录为空: " + dir.getAbsolutePath());
+            appendLog("空目录: " + dir.getAbsolutePath());
             return;
         }
 
         for (File f : files) {
             String name = prefix.isEmpty() ? f.getName() : prefix + "/" + f.getName();
-            if (f.isDirectory() && !f.getName().startsWith(".")) {
-                scanDir(f, name, result);
+            if (f.isDirectory()) {
+                if (!f.getName().startsWith(".")) {
+                    appendLog("扫描子目录: " + name);
+                    scanDir(f, name, result);
+                }
             } else if (f.isFile() && !f.getName().startsWith(".") && !f.getName().contains(".bak-")) {
                 result.put(name, f.lastModified());
+                appendLog("发现: " + name + " (" + f.length() + " bytes)");
             }
         }
     }
