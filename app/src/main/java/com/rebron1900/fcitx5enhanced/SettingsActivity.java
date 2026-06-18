@@ -7,6 +7,8 @@ import android.content.res.Configuration;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
@@ -18,6 +20,7 @@ import android.widget.Switch;
 import android.widget.TextView;
 
 import com.rebron1900.fcitx5enhanced.sync.SyncManager;
+import com.rebron1900.fcitx5enhanced.sync.WebDavSyncHelper;
 
 public class SettingsActivity extends Activity {
 
@@ -34,7 +37,11 @@ public class SettingsActivity extends Activity {
     private EditText etSyncUrl, etSyncUser, etSyncPass;
     private SeekBar sbInterval;
     private TextView tvIntervalVal, tvSyncStatus;
+    private TextView tvSyncLog;
+    private ScrollView svSyncLog;
     private View btnSyncNow;
+    private Handler logHandler;
+    private boolean logPolling;
 
     // Tab
     private TextView tabTheme, tabSync;
@@ -112,7 +119,17 @@ public class SettingsActivity extends Activity {
         sbInterval = findViewById(R.id.sb_interval);
         tvIntervalVal = findViewById(R.id.tv_interval_val);
         tvSyncStatus = findViewById(R.id.tv_sync_status);
+        tvSyncLog = findViewById(R.id.tv_sync_log);
+        svSyncLog = findViewById(R.id.sv_sync_log);
         btnSyncNow = findViewById(R.id.btn_sync_now);
+        logHandler = new Handler(Looper.getMainLooper());
+
+        // 显示上次日志
+        String lastLog = WebDavSyncHelper.getLog();
+        if (!lastLog.isEmpty()) {
+            tvSyncLog.setText(lastLog);
+            svSyncLog.post(() -> svSyncLog.fullScroll(View.FOCUS_DOWN));
+        }
 
         setupSyncTab();
 
@@ -164,14 +181,43 @@ public class SettingsActivity extends Activity {
         // 立即同步
         btnSyncNow.setOnClickListener(v -> {
             tvSyncStatus.setText("同步中...");
+            tvSyncLog.setText("");
             btnSyncNow.setEnabled(false);
+            startLogPolling();
             SyncManager.syncNow(this, result -> {
                 runOnUiThread(() -> {
                     tvSyncStatus.setText(result);
                     btnSyncNow.setEnabled(true);
+                    stopLogPolling();
+                    refreshLog();
                 });
             });
         });
+    }
+
+    private void startLogPolling() {
+        logPolling = true;
+        Runnable poller = new Runnable() {
+            @Override
+            public void run() {
+                if (!logPolling) return;
+                refreshLog();
+                logHandler.postDelayed(this, 500);
+            }
+        };
+        logHandler.post(poller);
+    }
+
+    private void stopLogPolling() {
+        logPolling = false;
+    }
+
+    private void refreshLog() {
+        String log = WebDavSyncHelper.getLog();
+        if (!log.isEmpty()) {
+            tvSyncLog.setText(log);
+            svSyncLog.post(() -> svSyncLog.fullScroll(View.FOCUS_DOWN));
+        }
     }
 
     private void loadSyncSettings() {

@@ -497,7 +497,42 @@
                 android:textSize="12sp"
                 android:textColor="#999"
                 android:gravity="center"
-                android:layout_marginBottom="32dp" />
+                android:layout_marginBottom="16dp" />
+
+            <!-- 调试日志 -->
+            <LinearLayout
+                android:id="@+id/card_sync_log"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#fff"
+                android:padding="12dp"
+                android:layout_marginBottom="32dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="同步日志"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:textColor="#333"
+                    android:layout_marginBottom="8dp" />
+
+                <ScrollView
+                    android:id="@+id/sv_sync_log"
+                    android:layout_width="match_parent"
+                    android:layout_height="200dp">
+
+                    <TextView
+                        android:id="@+id/tv_sync_log"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="等待同步..."
+                        android:textSize="11sp"
+                        android:fontFamily="monospace"
+                        android:textColor="#666" />
+                </ScrollView>
+            </LinearLayout>
         </LinearLayout>
     </ScrollView>
 
