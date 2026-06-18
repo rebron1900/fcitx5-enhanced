@@ -55,9 +55,10 @@ public class WebDavSyncHelper {
     }
 
     private final OkHttpClient client;
-    private final String baseUrl;     // 以 / 结尾
+    private final String baseUrl;
     private final String credentials;
     private final File localDir;
+    private long clockOffsetMs = 0; // 服务器时间 - 本地时间
 
     public WebDavSyncHelper(Context context) {
         this.baseUrl = ensureTrailingSlash(ConfigStorage.getWebDavUrl(context));
@@ -92,10 +93,10 @@ public class WebDavSyncHelper {
             scanDir(localDir, "", localFiles);
             appendLog("本地: " + localFiles.size() + " 个文件");
 
-            // 3. 远端文件 → 对比本地
+            // 3. 远端文件 → 对比本地（补偿时钟偏差）
             for (Map.Entry<String, Long> entry : remoteFiles.entrySet()) {
                 String name = entry.getKey();
-                long remoteTime = entry.getValue();
+                long remoteTime = entry.getValue() - clockOffsetMs; // 转换到本地时钟
 
                 if (localFiles.containsKey(name)) {
                     long localTime = localFiles.get(name);
@@ -174,11 +175,23 @@ public class WebDavSyncHelper {
         try (Response response = client.newCall(request).execute()) {
             int code = response.code();
             String respBody = response.body() != null ? response.body().string() : "";
-            appendLog("响应: HTTP " + code);
             if (code != 207 && code != 200) {
-                appendLog("错误体: " + respBody.substring(0, Math.min(respBody.length(), 200)));
+                appendLog("✗ HTTP " + code);
                 throw new IOException("PROPFIND failed: " + code);
             }
+
+            // 从 Date 头计算时钟偏差
+            if (clockOffsetMs == 0) {
+                String serverDate = response.header("Date");
+                if (serverDate != null) {
+                    long serverTime = parseWebDavDate(serverDate);
+                    if (serverTime > 0) {
+                        clockOffsetMs = serverTime - System.currentTimeMillis();
+                        appendLog("时钟偏差: " + (clockOffsetMs > 0 ? "+" : "") + (clockOffsetMs / 1000) + "s");
+                    }
+                }
+            }
+
             xml = respBody;
         }
 
@@ -335,11 +348,7 @@ public class WebDavSyncHelper {
 
     private void scanDir(File dir, String prefix, Map<String, Long> result) {
         File[] files = dir.listFiles();
-        if (files == null) {
-            appendLog("null目录: " + dir.getAbsolutePath());
-            return;
-        }
-        appendLog("扫描: " + (prefix.isEmpty() ? "/" : prefix) + " (" + files.length + " 项)");
+        if (files == null) return;
 
         for (File f : files) {
             String name = prefix.isEmpty() ? f.getName() : prefix + "/" + f.getName();
@@ -347,7 +356,6 @@ public class WebDavSyncHelper {
                 scanDir(f, name, result);
             } else if (f.isFile() && !f.getName().contains(".bak-")) {
                 result.put(name, f.lastModified());
-                appendLog("  文件: " + name + " (" + f.length() + "B)");
             }
         }
     }
