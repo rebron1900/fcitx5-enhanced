@@ -38,6 +38,25 @@ public class WebDavSyncHelper {
     private static final String TAG = "Fcitx5Sync";
     private static final long CONFLICT_THRESHOLD_MS = 30_000; // 30秒
 
+    /** 调试日志缓冲区（UI 层读取显示） */
+    private static final StringBuilder logBuffer = new StringBuilder();
+    private static final int MAX_LOG_LEN = 8000;
+
+    public static String getLog() { return logBuffer.toString(); }
+    public static void clearLog() { logBuffer.setLength(0); }
+
+    private static void appendLog(String msg) {
+        String ts = new SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date());
+        String line = ts + " " + msg;
+        Log.i(TAG, msg);
+        synchronized (logBuffer) {
+            logBuffer.append(line).append("\n");
+            if (logBuffer.length() > MAX_LOG_LEN) {
+                logBuffer.delete(0, logBuffer.length() - MAX_LOG_LEN);
+            }
+        }
+    }
+
     private final OkHttpClient client;
     private final String baseUrl;
     private final String credentials;
@@ -60,17 +79,18 @@ public class WebDavSyncHelper {
 
     /** 执行一次完整同步，返回人类可读的结果描述。 */
     public String sync() {
-        Log.i(TAG, "sync start: local=" + localDir.getAbsolutePath() + " remote=" + baseUrl);
+        appendLog("开始同步: local=" + localDir.getAbsolutePath());
+        appendLog("远端: " + baseUrl);
         int downloaded = 0, uploaded = 0, skipped = 0, conflicts = 0;
 
         try {
             // 1. 获取远端文件列表
             Map<String, Long> remoteFiles = listRemote();
-            Log.i(TAG, "remote files: " + remoteFiles.size());
+            appendLog("远端文件: " + remoteFiles.size() + " 个");
 
             // 2. 获取本地文件列表
             Map<String, Long> localFiles = listLocal();
-            Log.i(TAG, "local files: " + localFiles.size());
+            appendLog("本地文件: " + localFiles.size() + " 个");
 
             // 3. 处理远端文件
             for (Map.Entry<String, Long> entry : remoteFiles.entrySet()) {
@@ -82,37 +102,46 @@ public class WebDavSyncHelper {
                     long diff = remoteTime - localTime;
 
                     if (Math.abs(diff) < CONFLICT_THRESHOLD_MS) {
-                        // 时间戳接近，跳过
                         skipped++;
+                        appendLog("跳过(时间接近): " + name);
                     } else if (diff > 0) {
-                        // 远端更新 → 下载覆盖
                         backupLocal(name);
-                        if (downloadFile(name)) downloaded++;
+                        if (downloadFile(name)) {
+                            downloaded++;
+                            appendLog("↓ 下载: " + name);
+                        }
                     } else {
-                        // 本地更新 → 上传
-                        if (uploadFile(name)) uploaded++;
+                        if (uploadFile(name)) {
+                            uploaded++;
+                            appendLog("↑ 上传: " + name);
+                        }
                     }
                 } else {
-                    // 远端有、本地无 → 下载
-                    if (downloadFile(name)) downloaded++;
+                    if (downloadFile(name)) {
+                        downloaded++;
+                        appendLog("↓ 下载(新增): " + name);
+                    }
                 }
             }
 
             // 4. 处理本地独有的文件
             for (String name : localFiles.keySet()) {
                 if (!remoteFiles.containsKey(name)) {
-                    if (uploadFile(name)) uploaded++;
+                    if (uploadFile(name)) {
+                        uploaded++;
+                        appendLog("↑ 上传(新增): " + name);
+                    }
                 }
             }
 
         } catch (Exception e) {
-            Log.e(TAG, "sync failed", e);
+            appendLog("✗ 同步失败: " + e.getMessage());
             return "同步失败: " + e.getMessage();
         }
 
         String result = String.format(Locale.getDefault(),
                 "同步完成: 下载 %d, 上传 %d, 跳过 %d", downloaded, uploaded, skipped);
-        Log.i(TAG, result);
+        appendLog("✓ " + result);
         return result;
     }
 
@@ -178,7 +207,7 @@ public class WebDavSyncHelper {
 
             try (Response response = client.newCall(request).execute()) {
                 if (!response.isSuccessful()) {
-                    Log.w(TAG, "download failed: " + name + " code=" + response.code());
+                    appendLog("✗ 下载失败: " + name + " code=" + response.code());
                     return false;
                 }
 
@@ -191,11 +220,10 @@ public class WebDavSyncHelper {
                         fos.write(buf, 0, n);
                     }
                 }
-                Log.d(TAG, "downloaded: " + name);
                 return true;
             }
         } catch (Exception e) {
-            Log.w(TAG, "download error: " + name, e);
+            appendLog("✗ 下载异常: " + name + " " + e.getMessage());
             return false;
         }
     }
@@ -215,14 +243,13 @@ public class WebDavSyncHelper {
 
             try (Response response = client.newCall(request).execute()) {
                 if (!response.isSuccessful()) {
-                    Log.w(TAG, "upload failed: " + name + " code=" + response.code());
+                    appendLog("✗ 上传失败: " + name + " code=" + response.code());
                     return false;
                 }
-                Log.d(TAG, "uploaded: " + name);
                 return true;
             }
         } catch (Exception e) {
-            Log.w(TAG, "upload error: " + name, e);
+            appendLog("✗ 上传异常: " + name + " " + e.getMessage());
             return false;
         }
     }
@@ -235,7 +262,7 @@ public class WebDavSyncHelper {
         String timestamp = new SimpleDateFormat("yyyyMMdd-HHmm", Locale.getDefault()).format(new Date());
         File backup = new File(localDir, name + ".bak-" + timestamp);
         if (original.renameTo(backup)) {
-            Log.i(TAG, "backup: " + name + " → " + backup.getName());
+            appendLog("备份: " + name + " → " + backup.getName());
         }
     }
 
