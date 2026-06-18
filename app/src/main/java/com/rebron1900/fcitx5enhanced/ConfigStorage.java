@@ -140,9 +140,14 @@ public class ConfigStorage {
                 .apply();
     }
 
-    /** 获取 RIME sync 目录 */
+    /** 获取 RIME sync 目录 — 使用共享目录，插件和 RIME 都能访问 */
     public static File getRimeSyncDir(Context context) {
-        // 通过 createPackageContext 访问 fcitx5 的 externalFilesDir
+        // 首选：共享 Documents 目录（无需权限，插件和 RIME 都能访问）
+        File shared = new File("/sdcard/Documents/rime-sync");
+        if (shared.exists() || shared.mkdirs()) {
+            return shared;
+        }
+        // 备选：通过 createPackageContext 访问 fcitx5 目录
         for (String pkg : new String[]{"org.fcitx.fcitx5.android.fx", "org.fcitx.fcitx5.android"}) {
             try {
                 Context fcitxCtx = context.createPackageContext(pkg, Context.CONTEXT_IGNORE_SECURITY);
@@ -151,7 +156,7 @@ public class ConfigStorage {
                 return syncDir;
             } catch (Exception ignored) {}
         }
-        // fallback: 本应用目录
+        // 最后回退：插件目录
         File fallback = new File(context.getExternalFilesDir(null), "rime-sync");
         if (!fallback.exists()) fallback.mkdirs();
         return fallback;
