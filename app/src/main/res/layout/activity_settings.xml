@@ -1,288 +1,504 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="20dp"
+    android:orientation="vertical"
     android:background="#f0f0f0"
     android:fitsSystemWindows="true">
 
+    <!-- Tab Bar -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical">
+        android:layout_height="48dp"
+        android:orientation="horizontal"
+        android:paddingHorizontal="20dp"
+        android:gravity="center_vertical">
 
         <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="Fcitx5 增强"
-            android:textSize="22sp"
-            android:textStyle="bold"
-            android:textColor="#333"
-            android:layout_marginBottom="20dp" />
-
-        <!-- ── Card: blur ── -->
-        <LinearLayout
-            android:id="@+id/card_blur"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="#fff"
-            android:padding="16dp"
-            android:layout_marginBottom="12dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="毛玻璃模糊"
-                    android:textSize="15sp"
-                    android:textColor="#333" />
-                <TextView
-                    android:id="@+id/tv_blur_val"
-                    android:layout_width="40dp"
-                    android:layout_height="wrap_content"
-                    android:gravity="end"
-                    android:text="36"
-                    android:textSize="15sp"
-                    android:textColor="#6200EE" />
-            </LinearLayout>
-            <SeekBar
-                android:id="@+id/sb_blur_radius"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:max="100"
-                android:progress="36" />
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="数值越大，磨砂感越强。0 = 关闭模糊"
-                android:textSize="12sp"
-                android:textColor="#999"
-                android:layout_marginTop="4dp" />
-        </LinearLayout>
-
-        <!-- ── Card: alpha ── -->
-        <LinearLayout
-            android:id="@+id/card_alpha"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="#fff"
-            android:padding="16dp"
-            android:layout_marginBottom="12dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="背景透明度"
-                    android:textSize="15sp"
-                    android:textColor="#333" />
-                <TextView
-                    android:id="@+id/tv_alpha_val"
-                    android:layout_width="40dp"
-                    android:layout_height="wrap_content"
-                    android:gravity="end"
-                    android:text="78%"
-                    android:textSize="15sp"
-                    android:textColor="#6200EE" />
-            </LinearLayout>
-            <SeekBar
-                android:id="@+id/sb_bg_alpha"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:max="255"
-                android:progress="200" />
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="数值越高越不透明。滑块 150-200 对应 60-80%"
-                android:textSize="12sp"
-                android:textColor="#999"
-                android:layout_marginTop="4dp" />
-        </LinearLayout>
-
-        <!-- ── Card: corner ── -->
-        <LinearLayout
-            android:id="@+id/card_corner"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="#fff"
-            android:padding="16dp"
-            android:layout_marginBottom="12dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal">
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="键盘圆角"
-                    android:textSize="15sp"
-                    android:textColor="#333" />
-                <TextView
-                    android:id="@+id/tv_corner_val"
-                    android:layout_width="40dp"
-                    android:layout_height="wrap_content"
-                    android:gravity="end"
-                    android:text="28"
-                    android:textSize="15sp"
-                    android:textColor="#6200EE" />
-            </LinearLayout>
-            <SeekBar
-                android:id="@+id/sb_corner_radius"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:max="48"
-                android:progress="28" />
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="键盘整体四角圆角。0 = 关闭"
-                android:textSize="12sp"
-                android:textColor="#999"
-                android:layout_marginTop="4dp" />
-        </LinearLayout>
-
-        <!-- ── Card: button toggles ── -->
-        <LinearLayout
-            android:id="@+id/card_buttons"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="#fff"
-            android:padding="16dp"
-            android:layout_marginBottom="12dp">
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="底部按钮"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:textColor="#333"
-                android:layout_marginBottom="8dp" />
-
-            <!-- Voice input -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:paddingVertical="8dp">
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="语音输入"
-                    android:textSize="15sp"
-                    android:textColor="#333" />
-                <Switch
-                    android:id="@+id/sw_voice"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:checked="true" />
-            </LinearLayout>
-
-            <!-- Left button -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:paddingVertical="8dp">
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="左按钮（输入法切换）"
-                    android:textSize="15sp"
-                    android:textColor="#333" />
-                <Switch
-                    android:id="@+id/sw_left_btn"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:checked="true" />
-            </LinearLayout>
-
-            <!-- Right button -->
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:paddingVertical="8dp">
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="右按钮（剪贴板）"
-                    android:textSize="15sp"
-                    android:textColor="#333" />
-                <Switch
-                    android:id="@+id/sw_right_btn"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:checked="true" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <!-- ── Card: key border ── -->
-        <LinearLayout
-            android:id="@+id/card_key_border"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:background="#fff"
-            android:padding="16dp"
-            android:layout_marginBottom="12dp">
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="按键描边"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:textColor="#333"
-                android:layout_marginBottom="8dp" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:paddingVertical="8dp">
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="按键玻璃对角描边"
-                    android:textSize="15sp"
-                    android:textColor="#333" />
-                <Switch
-                    android:id="@+id/sw_key_border"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:checked="true" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="修改实时生效，无需保存"
-            android:textSize="12sp"
-            android:textColor="#999"
+            android:id="@+id/tab_theme"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
             android:gravity="center"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="32dp" />
+            android:text="主题美化"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:textColor="#07C160" />
 
+        <TextView
+            android:id="@+id/tab_sync"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="WebDAV 同步"
+            android:textSize="15sp"
+            android:textColor="#999" />
     </LinearLayout>
-</ScrollView>
+
+    <!-- Tab Content: Theme (默认显示) -->
+    <ScrollView
+        android:id="@+id/panel_theme"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="20dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Card: blur -->
+            <LinearLayout
+                android:id="@+id/card_blur"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#fff"
+                android:padding="16dp"
+                android:layout_marginBottom="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="毛玻璃模糊"
+                        android:textSize="15sp"
+                        android:textColor="#333" />
+                    <TextView
+                        android:id="@+id/tv_blur_val"
+                        android:layout_width="40dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:text="36"
+                        android:textSize="15sp"
+                        android:textColor="#6200EE" />
+                </LinearLayout>
+                <SeekBar
+                    android:id="@+id/sb_blur_radius"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:max="100"
+                    android:progress="36" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="数值越大，磨砂感越强。0 = 关闭模糊"
+                    android:textSize="12sp"
+                    android:textColor="#999"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
+
+            <!-- Card: alpha -->
+            <LinearLayout
+                android:id="@+id/card_alpha"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#fff"
+                android:padding="16dp"
+                android:layout_marginBottom="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="背景透明度"
+                        android:textSize="15sp"
+                        android:textColor="#333" />
+                    <TextView
+                        android:id="@+id/tv_alpha_val"
+                        android:layout_width="40dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:text="78%"
+                        android:textSize="15sp"
+                        android:textColor="#6200EE" />
+                </LinearLayout>
+                <SeekBar
+                    android:id="@+id/sb_bg_alpha"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:max="255"
+                    android:progress="200" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="数值越高越不透明。滑块 150-200 对应 60-80%"
+                    android:textSize="12sp"
+                    android:textColor="#999"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
+
+            <!-- Card: corner -->
+            <LinearLayout
+                android:id="@+id/card_corner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#fff"
+                android:padding="16dp"
+                android:layout_marginBottom="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="键盘圆角"
+                        android:textSize="15sp"
+                        android:textColor="#333" />
+                    <TextView
+                        android:id="@+id/tv_corner_val"
+                        android:layout_width="40dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:text="28"
+                        android:textSize="15sp"
+                        android:textColor="#6200EE" />
+                </LinearLayout>
+                <SeekBar
+                    android:id="@+id/sb_corner_radius"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:max="48"
+                    android:progress="28" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="键盘整体四角圆角。0 = 关闭"
+                    android:textSize="12sp"
+                    android:textColor="#999"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
+
+            <!-- Card: button toggles -->
+            <LinearLayout
+                android:id="@+id/card_buttons"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#fff"
+                android:padding="16dp"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="底部按钮"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="#333"
+                    android:layout_marginBottom="8dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:paddingVertical="8dp">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="语音输入"
+                        android:textSize="15sp"
+                        android:textColor="#333" />
+                    <Switch
+                        android:id="@+id/sw_voice"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:paddingVertical="8dp">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="左按钮（输入法切换）"
+                        android:textSize="15sp"
+                        android:textColor="#333" />
+                    <Switch
+                        android:id="@+id/sw_left_btn"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:paddingVertical="8dp">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="右按钮（剪贴板）"
+                        android:textSize="15sp"
+                        android:textColor="#333" />
+                    <Switch
+                        android:id="@+id/sw_right_btn"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Card: key border -->
+            <LinearLayout
+                android:id="@+id/card_key_border"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#fff"
+                android:padding="16dp"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="按键描边"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="#333"
+                    android:layout_marginBottom="8dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:paddingVertical="8dp">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="按键玻璃对角描边"
+                        android:textSize="15sp"
+                        android:textColor="#333" />
+                    <Switch
+                        android:id="@+id/sw_key_border"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:checked="true" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="修改实时生效，无需保存"
+                android:textSize="12sp"
+                android:textColor="#999"
+                android:gravity="center"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="32dp" />
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- Tab Content: WebDAV Sync (默认隐藏) -->
+    <ScrollView
+        android:id="@+id/panel_sync"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:padding="20dp"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <!-- Card: 同步开关 -->
+            <LinearLayout
+                android:id="@+id/card_sync_enable"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#fff"
+                android:padding="16dp"
+                android:layout_marginBottom="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="启用 WebDAV 同步"
+                        android:textSize="15sp"
+                        android:textColor="#333" />
+                    <Switch
+                        android:id="@+id/sw_sync_enabled"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content" />
+                </LinearLayout>
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="定时将 RIME sync 目录与 WebDAV 服务器双向同步"
+                    android:textSize="12sp"
+                    android:textColor="#999"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
+
+            <!-- Card: WebDAV 地址 -->
+            <LinearLayout
+                android:id="@+id/card_sync_url"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#fff"
+                android:padding="16dp"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="WebDAV 地址"
+                    android:textSize="15sp"
+                    android:textColor="#333"
+                    android:layout_marginBottom="8dp" />
+                <EditText
+                    android:id="@+id/et_sync_url"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="https://example.com/dav/rime-sync/"
+                    android:textSize="14sp"
+                    android:inputType="textUri"
+                    android:singleLine="true" />
+            </LinearLayout>
+
+            <!-- Card: 账号 -->
+            <LinearLayout
+                android:id="@+id/card_sync_auth"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#fff"
+                android:padding="16dp"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="用户名"
+                    android:textSize="15sp"
+                    android:textColor="#333"
+                    android:layout_marginBottom="4dp" />
+                <EditText
+                    android:id="@+id/et_sync_user"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="14sp"
+                    android:inputType="text"
+                    android:singleLine="true" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="密码"
+                    android:textSize="15sp"
+                    android:textColor="#333"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="4dp" />
+                <EditText
+                    android:id="@+id/et_sync_pass"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:textSize="14sp"
+                    android:inputType="textPassword"
+                    android:singleLine="true" />
+            </LinearLayout>
+
+            <!-- Card: 同步间隔 -->
+            <LinearLayout
+                android:id="@+id/card_sync_interval"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#fff"
+                android:padding="16dp"
+                android:layout_marginBottom="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="同步间隔"
+                        android:textSize="15sp"
+                        android:textColor="#333" />
+                    <TextView
+                        android:id="@+id/tv_interval_val"
+                        android:layout_width="60dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:text="30分钟"
+                        android:textSize="15sp"
+                        android:textColor="#07C160" />
+                </LinearLayout>
+                <SeekBar
+                    android:id="@+id/sb_interval"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:max="6"
+                    android:progress="2" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="15分钟 / 30分钟 / 1小时 / 2小时 / 3小时 / 6小时 / 12小时"
+                    android:textSize="11sp"
+                    android:textColor="#999"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
+
+            <!-- 立即同步按钮 -->
+            <TextView
+                android:id="@+id/btn_sync_now"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:gravity="center"
+                android:text="立即同步"
+                android:textSize="16sp"
+                android:textColor="#fff"
+                android:textStyle="bold"
+                android:background="#07C160"
+                android:layout_marginBottom="8dp" />
+
+            <!-- 同步状态 -->
+            <TextView
+                android:id="@+id/tv_sync_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="尚未同步"
+                android:textSize="12sp"
+                android:textColor="#999"
+                android:gravity="center"
+                android:layout_marginBottom="32dp" />
+        </LinearLayout>
+    </ScrollView>
+
+</LinearLayout>

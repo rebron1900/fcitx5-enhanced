@@ -10,8 +10,8 @@ android {
         applicationId = "com.rebron1900.fcitx5enhanced"
         minSdk = 26
         targetSdk = 35
-        versionCode = 16
-        versionName = "1.6.0"
+        versionCode = 17
+        versionName = "1.7.0"
     }
 
     buildTypes {
@@ -29,4 +29,6 @@ android {
 dependencies {
     compileOnly(files("libs/xposed-api-101.0.1.jar"))
     implementation("com.caverock:androidsvg:1.4")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("androidx.work:work-runtime:2.10.1")
 }
