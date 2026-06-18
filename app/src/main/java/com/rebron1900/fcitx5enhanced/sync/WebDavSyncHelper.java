@@ -16,6 +16,11 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
+import java.security.cert.X509Certificate;
+
 import okhttp3.Credentials;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
@@ -66,12 +71,28 @@ public class WebDavSyncHelper {
                 ConfigStorage.getWebDavPass(context));
         this.localDir = ConfigStorage.getRimeSyncDir(context);
 
-        this.client = new OkHttpClient.Builder()
+        OkHttpClient.Builder builder = new OkHttpClient.Builder()
                 .connectTimeout(15, TimeUnit.SECONDS)
                 .readTimeout(30, TimeUnit.SECONDS)
                 .writeTimeout(30, TimeUnit.SECONDS)
-                .followRedirects(false)
-                .build();
+                .followRedirects(false);
+
+        // 信任所有证书（自签证书兼容）
+        try {
+            X509TrustManager trustAll = new X509TrustManager() {
+                public void checkClientTrusted(X509Certificate[] chain, String authType) {}
+                public void checkServerTrusted(X509Certificate[] chain, String authType) {}
+                public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
+            };
+            SSLContext sslContext = SSLContext.getInstance("TLS");
+            sslContext.init(null, new TrustManager[]{trustAll}, null);
+            builder.sslSocketFactory(sslContext.getSocketFactory(), trustAll);
+            builder.hostnameVerifier((hostname, session) -> true);
+        } catch (Exception e) {
+            Log.w(TAG, "SSL trust-all setup failed: " + e);
+        }
+
+        this.client = builder.build();
     }
 
     /** 执行一次完整同步。 */
