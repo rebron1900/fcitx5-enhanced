@@ -212,6 +212,7 @@ public class WebDavSyncHelper {
                 }
 
                 File target = new File(localDir, name);
+                target.getParentFile().mkdirs();
                 try (InputStream is = response.body().byteStream();
                      FileOutputStream fos = new FileOutputStream(target)) {
                     byte[] buf = new byte[8192];
@@ -270,18 +271,29 @@ public class WebDavSyncHelper {
     //  本地文件操作
     // ══════════════════════════════════════════
 
-    /** 列出本地文件 {name → lastModified} */
+    /** 列出本地文件 {相对路径名 → lastModified}，递归扫描子目录 */
     private Map<String, Long> listLocal() {
         Map<String, Long> result = new HashMap<>();
-        File[] files = localDir.listFiles();
-        if (files == null) return result;
-
-        for (File f : files) {
-            if (f.isFile() && !f.getName().startsWith(".") && !f.getName().contains(".bak-")) {
-                result.put(f.getName(), f.lastModified());
-            }
+        scanDir(localDir, "", result);
+        appendLog("本地扫描: " + result.size() + " 个文件");
+        for (String name : result.keySet()) {
+            appendLog("  本地文件: " + name);
         }
         return result;
+    }
+
+    private void scanDir(File dir, String prefix, Map<String, Long> result) {
+        File[] files = dir.listFiles();
+        if (files == null) return;
+
+        for (File f : files) {
+            String name = prefix.isEmpty() ? f.getName() : prefix + "/" + f.getName();
+            if (f.isDirectory() && !f.getName().startsWith(".")) {
+                scanDir(f, name, result);
+            } else if (f.isFile() && !f.getName().startsWith(".") && !f.getName().contains(".bak-")) {
+                result.put(name, f.lastModified());
+            }
+        }
     }
 
     // ══════════════════════════════════════════
