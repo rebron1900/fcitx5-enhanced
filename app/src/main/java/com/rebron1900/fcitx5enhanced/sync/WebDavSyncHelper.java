@@ -10,10 +10,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -36,9 +34,8 @@ import okhttp3.Response;
 public class WebDavSyncHelper {
 
     private static final String TAG = "Fcitx5Sync";
-    private static final long CONFLICT_THRESHOLD_MS = 30_000; // 30秒
+    private static final long CONFLICT_THRESHOLD_MS = 30_000;
 
-    /** 调试日志缓冲区（UI 层读取显示） */
     private static final StringBuilder logBuffer = new StringBuilder();
     private static final int MAX_LOG_LEN = 8000;
 
@@ -58,7 +55,7 @@ public class WebDavSyncHelper {
     }
 
     private final OkHttpClient client;
-    private final String baseUrl;
+    private final String baseUrl;     // 以 / 结尾
     private final String credentials;
     private final File localDir;
 
@@ -73,26 +70,28 @@ public class WebDavSyncHelper {
                 .connectTimeout(15, TimeUnit.SECONDS)
                 .readTimeout(30, TimeUnit.SECONDS)
                 .writeTimeout(30, TimeUnit.SECONDS)
-                .followRedirects(false)  // WebDAV 重定向需手动处理
+                .followRedirects(false)
                 .build();
     }
 
-    /** 执行一次完整同步，返回人类可读的结果描述。 */
+    /** 执行一次完整同步。 */
     public String sync() {
-        appendLog("开始同步: local=" + localDir.getAbsolutePath());
+        appendLog("开始同步");
+        appendLog("本地: " + localDir.getAbsolutePath());
         appendLog("远端: " + baseUrl);
-        int downloaded = 0, uploaded = 0, skipped = 0, conflicts = 0;
+        int downloaded = 0, uploaded = 0, skipped = 0;
 
         try {
-            // 1. 获取远端文件列表
-            Map<String, Long> remoteFiles = listRemote();
-            appendLog("远端文件: " + remoteFiles.size() + " 个");
+            // 1. 远端文件（递归）
+            Map<String, Long> remoteFiles = listRemoteRecursive(baseUrl, "");
+            appendLog("远端: " + remoteFiles.size() + " 个文件");
 
-            // 2. 获取本地文件列表
-            Map<String, Long> localFiles = listLocal();
-            appendLog("本地文件: " + localFiles.size() + " 个");
+            // 2. 本地文件（递归）
+            Map<String, Long> localFiles = new HashMap<>();
+            scanDir(localDir, "", localFiles);
+            appendLog("本地: " + localFiles.size() + " 个文件");
 
-            // 3. 处理远端文件
+            // 3. 远端文件 → 对比本地
             for (Map.Entry<String, Long> entry : remoteFiles.entrySet()) {
                 String name = entry.getKey();
                 long remoteTime = entry.getValue();
@@ -103,44 +102,46 @@ public class WebDavSyncHelper {
 
                     if (Math.abs(diff) < CONFLICT_THRESHOLD_MS) {
                         skipped++;
-                        appendLog("跳过(时间接近): " + name);
                     } else if (diff > 0) {
+                        // 远端更新 → 下载
                         backupLocal(name);
                         if (downloadFile(name)) {
                             downloaded++;
-                            appendLog("↓ 下载: " + name);
+                            appendLog("↓ " + name);
                         }
                     } else {
+                        // 本地更新 → 上传
                         if (uploadFile(name)) {
                             uploaded++;
-                            appendLog("↑ 上传: " + name);
+                            appendLog("↑ " + name);
                         }
                     }
                 } else {
+                    // 远端有、本地无 → 下载
                     if (downloadFile(name)) {
                         downloaded++;
-                        appendLog("↓ 下载(新增): " + name);
+                        appendLog("↓+ " + name);
                     }
                 }
             }
 
-            // 4. 处理本地独有的文件
+            // 4. 本地独有的 → 上传
             for (String name : localFiles.keySet()) {
                 if (!remoteFiles.containsKey(name)) {
                     if (uploadFile(name)) {
                         uploaded++;
-                        appendLog("↑ 上传(新增): " + name);
+                        appendLog("+↑ " + name);
                     }
                 }
             }
 
         } catch (Exception e) {
-            appendLog("✗ 同步失败: " + e.getMessage());
+            appendLog("✗ 失败: " + e.getMessage());
             return "同步失败: " + e.getMessage();
         }
 
         String result = String.format(Locale.getDefault(),
-                "同步完成: 下载 %d, 上传 %d, 跳过 %d", downloaded, uploaded, skipped);
+                "完成: ↓%d ↑%d =%d", downloaded, uploaded, skipped);
         appendLog("✓ " + result);
         return result;
     }
@@ -149,69 +150,83 @@ public class WebDavSyncHelper {
     //  WebDAV 操作
     // ══════════════════════════════════════════
 
-    /** PROPFIND 获取远端文件列表 {name → lastModified} */
-    private Map<String, Long> listRemote() throws IOException {
+    /**
+     * 递归 PROPFIND，返回 {相对路径 → lastModified}。
+     * 路径相对于 baseUrl，如 "userdb/userdb.txt"。
+     */
+    private Map<String, Long> listRemoteRecursive(String url, String prefix) throws IOException {
         Map<String, Long> result = new HashMap<>();
 
         String body = "<?xml version=\"1.0\" encoding=\"utf-8\"?>"
-                + "<D:propfind xmlns:D=\"DAV:\">"
-                + "  <D:allprop/>"
-                + "</D:propfind>";
+                + "<D:propfind xmlns:D=\"DAV:\"><D:allprop/></D:propfind>";
 
         Request request = new Request.Builder()
-                .url(baseUrl)
+                .url(url)
                 .method("PROPFIND", RequestBody.create(body, MediaType.parse("application/xml")))
                 .header("Authorization", credentials)
                 .header("Depth", "1")
                 .build();
 
+        String xml;
         try (Response response = client.newCall(request).execute()) {
             if (!response.isSuccessful() && response.code() != 207) {
                 throw new IOException("PROPFIND failed: " + response.code());
             }
-            String xml = response.body() != null ? response.body().string() : "";
-            parsePropfindResponse(xml, result);
+            xml = response.body() != null ? response.body().string() : "";
+        }
+
+        // 解析每个 D:response
+        String[] items = xml.split("<D:response>|<d:response>");
+        for (String item : items) {
+            String href = extractTag(item, "D:href", "d:href");
+            if (href == null) continue;
+
+            // 跳过目录自身（即 url 对应的 href）
+            String selfHref = url.replace(baseUrl, "/");
+            if (href.equals(selfHref) || href.equals(selfHref.replaceAll("/$", ""))) continue;
+
+            // 提取文件名（href 最后一段）
+            String trimmed = href.endsWith("/") ? href.substring(0, href.length() - 1) : href;
+            String lastSegment = trimmed.substring(trimmed.lastIndexOf('/') + 1);
+            if (lastSegment.isEmpty()) continue;
+
+            String relPath = prefix.isEmpty() ? lastSegment : prefix + "/" + lastSegment;
+
+            if (href.endsWith("/")) {
+                // 子目录 → 递归
+                String subUrl = ensureTrailingSlash(url) + lastSegment + "/";
+                result.putAll(listRemoteRecursive(subUrl, relPath));
+            } else {
+                // 文件
+                String modified = extractTag(item, "D:getlastmodified", "d:getlastmodified");
+                long time = parseWebDavDate(modified);
+                if (time > 0) {
+                    result.put(relPath, time);
+                }
+            }
         }
 
         return result;
     }
 
-    /** 解析 PROPFIND XML，提取文件名和修改时间 */
-    private void parsePropfindResponse(String xml, Map<String, Long> result) {
-        // 简单 XML 解析，避免引入 XML 库
-        String[] items = xml.split("<D:response>|<d:response>");
-        for (String item : items) {
-            String href = extractTag(item, "D:href", "d:href");
-            if (href == null || href.endsWith("/")) continue; // 跳过目录
-
-            // 从 href 提取文件名
-            String name = href.substring(href.lastIndexOf('/') + 1);
-            if (name.isEmpty()) continue;
-
-            // 提取修改时间
-            String modified = extractTag(item, "D:getlastmodified", "d:getlastmodified");
-            long time = parseWebDavDate(modified);
-            if (time > 0) {
-                result.put(name, time);
-            }
-        }
-    }
-
-    /** 下载单个文件到本地 */
-    private boolean downloadFile(String name) {
+    /** 下载单个文件 */
+    private boolean downloadFile(String relPath) {
         try {
+            // 构建 URL：对路径中的每段做编码
+            String url = baseUrl + relPath.replace(" ", "%20");
+
             Request request = new Request.Builder()
-                    .url(baseUrl + name)
+                    .url(url)
                     .header("Authorization", credentials)
                     .build();
 
             try (Response response = client.newCall(request).execute()) {
                 if (!response.isSuccessful()) {
-                    appendLog("✗ 下载失败: " + name + " code=" + response.code());
+                    appendLog("✗ 下载失败: " + relPath + " HTTP " + response.code());
                     return false;
                 }
 
-                File target = new File(localDir, name);
+                File target = new File(localDir, relPath);
                 target.getParentFile().mkdirs();
                 try (InputStream is = response.body().byteStream();
                      FileOutputStream fos = new FileOutputStream(target)) {
@@ -224,67 +239,95 @@ public class WebDavSyncHelper {
                 return true;
             }
         } catch (Exception e) {
-            appendLog("✗ 下载异常: " + name + " " + e.getMessage());
+            appendLog("✗ 下载异常: " + relPath + " " + e.getMessage());
             return false;
         }
     }
 
-    /** 上传单个文件到 WebDAV */
-    private boolean uploadFile(String name) {
+    /** 上传单个文件，自动创建父目录 */
+    private boolean uploadFile(String relPath) {
         try {
-            File file = new File(localDir, name);
-            if (!file.exists()) return false;
+            File file = new File(localDir, relPath);
+            if (!file.exists()) {
+                appendLog("✗ 本地不存在: " + relPath);
+                return false;
+            }
 
+            // 确保远端父目录存在
+            String parent = relPath.contains("/")
+                    ? relPath.substring(0, relPath.lastIndexOf('/'))
+                    : "";
+            if (!parent.isEmpty()) {
+                mkcolRecursive(parent);
+            }
+
+            String url = baseUrl + relPath.replace(" ", "%20");
             RequestBody body = RequestBody.create(file, MediaType.parse("application/octet-stream"));
             Request request = new Request.Builder()
-                    .url(baseUrl + name)
+                    .url(url)
                     .put(body)
                     .header("Authorization", credentials)
                     .build();
 
             try (Response response = client.newCall(request).execute()) {
                 if (!response.isSuccessful()) {
-                    appendLog("✗ 上传失败: " + name + " code=" + response.code());
+                    appendLog("✗ 上传失败: " + relPath + " HTTP " + response.code());
                     return false;
                 }
                 return true;
             }
         } catch (Exception e) {
-            appendLog("✗ 上传异常: " + name + " " + e.getMessage());
+            appendLog("✗ 上传异常: " + relPath + " " + e.getMessage());
             return false;
         }
     }
 
-    /** 备份本地文件（冲突保护） */
-    private void backupLocal(String name) {
-        File original = new File(localDir, name);
+    /** 递归创建远端目录（MKCOL） */
+    private void mkcolRecursive(String relPath) {
+        String[] parts = relPath.split("/");
+        String current = "";
+        for (String part : parts) {
+            current = current.isEmpty() ? part : current + "/" + part;
+            String dirUrl = baseUrl + current + "/";
+            try {
+                Request request = new Request.Builder()
+                        .url(dirUrl)
+                        .method("MKCOL", null)
+                        .header("Authorization", credentials)
+                        .build();
+                try (Response resp = client.newCall(request).execute()) {
+                    int code = resp.code();
+                    if (code == 201) {
+                        appendLog("📁 创建目录: " + current);
+                    }
+                    // 405 = 已存在，忽略
+                }
+            } catch (Exception ignored) {}
+        }
+    }
+
+    /** 备份本地文件 */
+    private void backupLocal(String relPath) {
+        File original = new File(localDir, relPath);
         if (!original.exists()) return;
 
-        String timestamp = new SimpleDateFormat("yyyyMMdd-HHmm", Locale.getDefault()).format(new Date());
-        File backup = new File(localDir, name + ".bak-" + timestamp);
+        String ts = new SimpleDateFormat("yyyyMMdd-HHmm", Locale.getDefault()).format(new Date());
+        File backup = new File(localDir, relPath + ".bak-" + ts);
         if (original.renameTo(backup)) {
-            appendLog("备份: " + name + " → " + backup.getName());
+            appendLog("备份: " + relPath);
         }
     }
 
     // ══════════════════════════════════════════
-    //  本地文件操作
+    //  本地扫描
     // ══════════════════════════════════════════
-
-    /** 列出本地文件 {相对路径名 → lastModified}，递归扫描子目录 */
-    private Map<String, Long> listLocal() {
-        Map<String, Long> result = new HashMap<>();
-        scanDir(localDir, "", result);
-        appendLog("本地扫描: " + result.size() + " 个文件");
-        for (String name : result.keySet()) {
-            appendLog("  本地文件: " + name);
-        }
-        return result;
-    }
 
     private void scanDir(File dir, String prefix, Map<String, Long> result) {
         File[] files = dir.listFiles();
-        if (files == null) return;
+        if (files == null) {
+            appendLog("扫描目录为空: " + dir.getAbsolutePath());
+            return;
+        }
 
         for (File f : files) {
             String name = prefix.isEmpty() ? f.getName() : prefix + "/" + f.getName();
@@ -312,16 +355,13 @@ public class WebDavSyncHelper {
         return null;
     }
 
-    /** 解析 WebDAV 日期格式 (RFC 1123) */
     private static long parseWebDavDate(String dateStr) {
         if (dateStr == null || dateStr.isEmpty()) return 0;
         try {
-            // "Tue, 16 Jun 2026 14:30:00 GMT"
             SimpleDateFormat sdf = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z", Locale.ENGLISH);
             Date date = sdf.parse(dateStr);
             return date != null ? date.getTime() : 0;
         } catch (Exception e) {
-            Log.w(TAG, "parse date failed: " + dateStr);
             return 0;
         }
     }
