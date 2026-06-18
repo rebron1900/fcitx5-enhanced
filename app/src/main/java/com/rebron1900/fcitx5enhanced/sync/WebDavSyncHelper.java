@@ -188,9 +188,13 @@ public class WebDavSyncHelper {
             String href = extractTag(item, "D:href", "d:href");
             if (href == null) continue;
 
-            // 跳过目录自身（即 url 对应的 href）
-            String selfHref = url.replace(baseUrl, "/");
-            if (href.equals(selfHref) || href.equals(selfHref.replaceAll("/$", ""))) continue;
+            // 跳过目录自身 — PROPFIND 第一条响应总是当前目录
+            // 从 URL 提取路径比较：https://host/dav/rime-sync/ → /dav/rime-sync/
+            try {
+                java.net.URI uri = java.net.URI.create(url);
+                String selfPath = uri.getPath();
+                if (href.equals(selfPath) || href.equals(selfPath.replaceAll("/$", ""))) continue;
+            } catch (Exception ignored) {}
 
             // 提取文件名（href 最后一段）
             String trimmed = href.endsWith("/") ? href.substring(0, href.length() - 1) : href;
