@@ -42,6 +42,7 @@ public class ConfigProvider extends ContentProvider {
             writeBool(ed, values, "key_border", true);
             writeInt(ed, values, "blur_radius", 100);
             writeInt(ed, values, "bg_alpha", 60);
+            writeInt(ed, values, "key_alpha", 140);
             writeInt(ed, values, "corner_radius", 20);
             ed.commit();
             // 通知观察者
@@ -62,7 +63,7 @@ public class ConfigProvider extends ContentProvider {
                     .getSharedPreferences(SP_NAME, android.content.Context.MODE_PRIVATE);
             MatrixCursor c = new MatrixCursor(new String[]{
                     "show_left_button", "show_right_button", "voice_enabled",
-                    "key_border", "blur_radius", "bg_alpha", "corner_radius"
+                    "key_border", "blur_radius", "bg_alpha", "key_alpha", "corner_radius"
             });
             c.addRow(new Object[]{
                     sp.getBoolean("show_left_button", true),
@@ -71,6 +72,7 @@ public class ConfigProvider extends ContentProvider {
                     sp.getBoolean("key_border", true),
                     sp.getInt("blur_radius", 100),
                     sp.getInt("bg_alpha", 60),
+                    sp.getInt("key_alpha", 140),
                     sp.getInt("corner_radius", 20)
             });
             return c;

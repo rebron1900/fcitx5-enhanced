@@ -35,12 +35,13 @@ public class ConfigStorage {
     }
     
     /** 写入配置到文件 */
-    public static void writeConfigToFile(Context context, int blur, int alpha, int corner,
+    public static void writeConfigToFile(Context context, int blur, int alpha, int keyAlpha, int corner,
                                           boolean voice, boolean leftBtn, boolean rightBtn, boolean keyBorder) {
         try {
             JSONObject json = new JSONObject();
             json.put("blur_radius", blur);
             json.put("bg_alpha", alpha);
+            json.put("key_alpha", keyAlpha);
             json.put("corner_radius", corner);
             json.put("voice_enabled", voice);
             json.put("show_left_button", leftBtn);
@@ -80,6 +81,7 @@ public class ConfigStorage {
             JSONObject json = new JSONObject(sb.toString());
             cfg.blur = json.optInt("blur_radius", 100);
             cfg.alpha = json.optInt("bg_alpha", 60);
+            cfg.keyAlpha = json.optInt("key_alpha", 140);
             cfg.corner = json.optInt("corner_radius", 20);
             cfg.toolbar = cfg.corner;
             cfg.voice = json.optBoolean("voice_enabled", true);
