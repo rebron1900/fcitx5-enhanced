@@ -7,6 +7,8 @@ import androidx.annotation.NonNull;
 import androidx.work.Worker;
 import androidx.work.WorkerParameters;
 
+import com.rebron1900.fcitx5enhanced.ConfigStorage;
+
 /**
  * WorkManager Worker — 定时执行 WebDAV 同步。
  *
@@ -27,9 +29,11 @@ public class SyncWorker extends Worker {
         try {
             WebDavSyncHelper helper = new WebDavSyncHelper(getApplicationContext());
             String result = helper.sync();
+            ConfigStorage.saveLastSyncResult(getApplicationContext(), result, System.currentTimeMillis());
             Log.i(TAG, "SyncWorker done: " + result);
             return Result.success();
         } catch (Exception e) {
+            ConfigStorage.saveLastSyncResult(getApplicationContext(), "失败: " + e.getMessage(), System.currentTimeMillis());
             Log.e(TAG, "SyncWorker failed", e);
             return Result.retry();
         }

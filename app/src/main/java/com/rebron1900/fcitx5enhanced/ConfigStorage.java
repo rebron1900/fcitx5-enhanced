@@ -140,6 +140,21 @@ public class ConfigStorage {
                 .apply();
     }
 
+    public static long getLastSyncTime(Context context) {
+        return getSyncPrefs(context).getLong("last_sync_time", 0);
+    }
+
+    public static String getLastSyncResult(Context context) {
+        return getSyncPrefs(context).getString("last_sync_result", "尚未同步");
+    }
+
+    public static void saveLastSyncResult(Context context, String result, long time) {
+        getSyncPrefs(context).edit()
+                .putLong("last_sync_time", time)
+                .putString("last_sync_result", result)
+                .apply();
+    }
+
     /** 获取 RIME sync 目录 — 直接访问 fcitx5 的数据目录（需 MANAGE_EXTERNAL_STORAGE） */
     public static File getRimeSyncDir(Context context) {
         // 直接用 fcitx5 的 sync 目录（插件有所有文件访问权限）
