@@ -139,6 +139,51 @@
                     android:layout_marginTop="4dp" />
             </LinearLayout>
 
+            <!-- Card: key alpha -->
+            <LinearLayout
+                android:id="@+id/card_key_alpha"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#fff"
+                android:padding="16dp"
+                android:layout_marginBottom="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="按键透明度"
+                        android:textSize="15sp"
+                        android:textColor="#333" />
+                    <TextView
+                        android:id="@+id/tv_key_alpha_val"
+                        android:layout_width="40dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:text="55%"
+                        android:textSize="15sp"
+                        android:textColor="#6200EE" />
+                </LinearLayout>
+                <SeekBar
+                    android:id="@+id/sb_key_alpha"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:max="255"
+                    android:progress="140" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="按键背景透明度，独立于键盘背景。数值越高越不透明"
+                    android:textSize="12sp"
+                    android:textColor="#999"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
+
             <!-- Card: corner -->
             <LinearLayout
                 android:id="@+id/card_corner"

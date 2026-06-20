@@ -38,6 +38,7 @@ public class MainHook extends XposedModule {
     public static class Config {
         public int blur = 100;
         public int alpha = 60;
+        public int keyAlpha = 140;  // 按键背景透明度（独立于键盘背景）
         public int corner = 20;
         public int toolbar = 20;
         public boolean voice = true;
@@ -129,6 +130,7 @@ public class MainHook extends XposedModule {
                     .getSharedPreferences("fcitx5_enhanced_config", android.content.Context.MODE_PRIVATE);
             config.blur = sp.getInt("blur_radius", 100);
             config.alpha = sp.getInt("bg_alpha", 60);
+            config.keyAlpha = sp.getInt("key_alpha", 140);
             config.corner = sp.getInt("corner_radius", 20);
             config.toolbar = config.corner;
             config.voice = sp.getBoolean("voice_enabled", true);
@@ -157,6 +159,7 @@ public class MainHook extends XposedModule {
                     .getSharedPreferences("fcitx5_enhanced_config", android.content.Context.MODE_PRIVATE);
             cfg.blur = sp.getInt("blur_radius", 100);
             cfg.alpha = sp.getInt("bg_alpha", 60);
+            cfg.keyAlpha = sp.getInt("key_alpha", 140);
             cfg.corner = sp.getInt("corner_radius", 20);
             cfg.toolbar = cfg.corner;
             cfg.voice = sp.getBoolean("voice_enabled", true);
@@ -293,6 +296,7 @@ public class MainHook extends XposedModule {
                         boolean bV = intent.getBooleanExtra("voice_enabled", true);
                         int bB = intent.getIntExtra("blur_radius", 100);
                         int bA = intent.getIntExtra("bg_alpha", 60);
+                        int bKA = intent.getIntExtra("key_alpha", 140);
                         int bC = intent.getIntExtra("corner_radius", 20);
                         boolean bK = intent.getBooleanExtra("key_border", true);
                         Log.i(TAG, "BROADCAST payload: L=" + bL + " R=" + bR + " V=" + bV + " K=" + bK);
@@ -306,6 +310,7 @@ public class MainHook extends XposedModule {
                                 .putBoolean("voice_enabled", bV)
                                 .putInt("blur_radius", bB)
                                 .putInt("bg_alpha", bA)
+                                .putInt("key_alpha", bKA)
                                 .putInt("corner_radius", bC)
                                 .putBoolean("key_border", bK)
                                 .commit();
@@ -427,6 +432,7 @@ public class MainHook extends XposedModule {
                     cfg.keyBorder = c.getInt(c.getColumnIndexOrThrow("key_border")) != 0;
                     cfg.blur = c.getInt(c.getColumnIndexOrThrow("blur_radius"));
                     cfg.alpha = c.getInt(c.getColumnIndexOrThrow("bg_alpha"));
+                    cfg.keyAlpha = c.getInt(c.getColumnIndexOrThrow("key_alpha"));
                     cfg.corner = c.getInt(c.getColumnIndexOrThrow("corner_radius"));
                     cfg.toolbar = cfg.corner;
                     Log.i(TAG, "reapply from provider: keyBorder=" + cfg.keyBorder);
@@ -442,30 +448,54 @@ public class MainHook extends XposedModule {
     }
 
     // ══════════════════════════════════════════
-    //  定时同步检查（键盘弹出时触发）
+    //  同步检查（键盘弹出时触发）
     // ══════════════════════════════════════════
+
+    private static long sLastSyncCheckTime = 0;
 
     private void checkAndRunSync(android.content.Context ctx) {
         try {
-            if (!ConfigStorage.isWebDavEnabled(ctx)) return;
+            if (!ConfigStorage.isWebDavEnabled(ctx)) {
+                Log.d(TAG, "sync: webdav disabled");
+                return;
+            }
 
-            long lastSync = ConfigStorage.getLastSyncTime(ctx);
-            int intervalMs = ConfigStorage.getSyncInterval(ctx) * 60 * 1000;
             long now = System.currentTimeMillis();
+            int intervalMs = ConfigStorage.getSyncInterval(ctx) * 60 * 1000;
 
-            if (now - lastSync < intervalMs) return;
+            // 间隔检查（用设置里的 interval，默认30分钟）
+            if (now - sLastSyncCheckTime < intervalMs) {
+                Log.d(TAG, "sync: interval not reached, skip");
+                return;
+            }
+            sLastSyncCheckTime = now;
 
-            Log.i(TAG, "sync triggered by keyboard show");
+            // 检查 sync 目录是否存在
+            java.io.File syncDir = ConfigStorage.getRimeSyncDir(ctx);
+            if (!syncDir.exists()) {
+                Log.w(TAG, "sync: dir not exist: " + syncDir.getAbsolutePath());
+                return;
+            }
+
+            Log.i(TAG, "sync triggered, dir=" + syncDir.getAbsolutePath());
             new Thread(() -> {
                 try {
                     com.rebron1900.fcitx5enhanced.sync.WebDavSyncHelper helper =
                             new com.rebron1900.fcitx5enhanced.sync.WebDavSyncHelper(ctx);
-                    String result = helper.sync();
-                    ConfigStorage.saveLastSyncResult(ctx, result, System.currentTimeMillis());
-                    Log.i(TAG, "sync done: " + result);
+                    com.rebron1900.fcitx5enhanced.sync.WebDavSyncHelper.SyncResult result = helper.sync();
+                    ConfigStorage.saveLastSyncResult(ctx, result.toToastString(), System.currentTimeMillis());
+                    Log.i(TAG, "sync done: " + result.toToastString());
+
+                    // Toast 通知
+                    new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                        android.widget.Toast.makeText(ctx, result.toToastString(), android.widget.Toast.LENGTH_SHORT).show();
+                    });
                 } catch (Exception e) {
                     ConfigStorage.saveLastSyncResult(ctx, "失败: " + e.getMessage(), System.currentTimeMillis());
                     Log.w(TAG, "sync failed: " + e);
+                    new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                        android.widget.Toast.makeText(ctx, "同步失败: " + e.getMessage(), android.widget.Toast.LENGTH_SHORT).show();
+                    });
                 }
             }, "rime-webdav-sync").start();
         } catch (Exception e) {

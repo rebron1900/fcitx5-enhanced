@@ -32,8 +32,8 @@ public class SettingsActivity extends Activity {
     private static final String TAG = "Fcitx5Enh";
 
     // Theme tab
-    private SeekBar sbBlur, sbAlpha, sbCorner;
-    private TextView tvBlur, tvAlpha, tvCorner;
+    private SeekBar sbBlur, sbAlpha, sbKeyAlpha, sbCorner;
+    private TextView tvBlur, tvAlpha, tvKeyAlpha, tvCorner;
     private Switch swVoice, swLeft, swRight, swKeyBorder;
     private boolean isDark;
 
@@ -75,9 +75,11 @@ public class SettingsActivity extends Activity {
         // === Theme tab controls ===
         sbBlur = findViewById(R.id.sb_blur_radius);
         sbAlpha = findViewById(R.id.sb_bg_alpha);
+        sbKeyAlpha = findViewById(R.id.sb_key_alpha);
         sbCorner = findViewById(R.id.sb_corner_radius);
         tvBlur = findViewById(R.id.tv_blur_val);
         tvAlpha = findViewById(R.id.tv_alpha_val);
+        tvKeyAlpha = findViewById(R.id.tv_key_alpha_val);
         tvCorner = findViewById(R.id.tv_corner_val);
         swVoice = findViewById(R.id.sw_voice);
         swLeft = findViewById(R.id.sw_left_btn);
@@ -92,6 +94,7 @@ public class SettingsActivity extends Activity {
                 if (!fromUser) return;
                 if (sb == sbBlur) tvBlur.setText(progress == 0 ? "关" : progress + "");
                 else if (sb == sbAlpha) tvAlpha.setText((progress * 100) / 255 + "%");
+                else if (sb == sbKeyAlpha) tvKeyAlpha.setText((progress * 100) / 255 + "%");
                 else if (sb == sbCorner) tvCorner.setText(progress == 0 ? "关" : progress + "");
             }
             @Override public void onStartTrackingTouch(SeekBar sb) {}
@@ -100,6 +103,7 @@ public class SettingsActivity extends Activity {
 
         sbBlur.setOnSeekBarChangeListener(listener);
         sbAlpha.setOnSeekBarChangeListener(listener);
+        sbKeyAlpha.setOnSeekBarChangeListener(listener);
         sbCorner.setOnSeekBarChangeListener(listener);
 
         View.OnClickListener switchListener = v -> saveAndApply();
@@ -403,6 +407,7 @@ public class SettingsActivity extends Activity {
         if (sp.getAll().size() > 0) {
             sbBlur.setProgress(sp.getInt("blur_radius", 100));
             sbAlpha.setProgress(sp.getInt("bg_alpha", 60));
+            sbKeyAlpha.setProgress(sp.getInt("key_alpha", 140));
             sbCorner.setProgress(sp.getInt("corner_radius", 20));
             swVoice.setChecked(sp.getBoolean("voice_enabled", true));
             swLeft.setChecked(sp.getBoolean("show_left_button", true));
@@ -414,6 +419,7 @@ public class SettingsActivity extends Activity {
                 MainHook.Config cfg = ConfigStorage.readConfigFromFile(fcitxCtx);
                 sbBlur.setProgress(cfg.blur);
                 sbAlpha.setProgress(cfg.alpha);
+                sbKeyAlpha.setProgress(cfg.keyAlpha);
                 sbCorner.setProgress(cfg.corner);
                 swVoice.setChecked(cfg.voice);
                 swLeft.setChecked(cfg.leftBtn);
@@ -428,6 +434,7 @@ public class SettingsActivity extends Activity {
     private void updateLabels() {
         tvBlur.setText(sbBlur.getProgress() == 0 ? "关" : String.valueOf(sbBlur.getProgress()));
         tvAlpha.setText((sbAlpha.getProgress() * 100) / 255 + "%");
+        tvKeyAlpha.setText((sbKeyAlpha.getProgress() * 100) / 255 + "%");
         tvCorner.setText(sbCorner.getProgress() == 0 ? "关" : String.valueOf(sbCorner.getProgress()));
     }
 
@@ -438,6 +445,7 @@ public class SettingsActivity extends Activity {
         getPreferences(MODE_PRIVATE).edit()
                 .putInt("blur_radius", sbBlur.getProgress())
                 .putInt("bg_alpha", sbAlpha.getProgress())
+                .putInt("key_alpha", sbKeyAlpha.getProgress())
                 .putInt("corner_radius", sbCorner.getProgress())
                 .putBoolean("voice_enabled", swVoice.isChecked())
                 .putBoolean("show_left_button", swLeft.isChecked())
@@ -448,7 +456,7 @@ public class SettingsActivity extends Activity {
         android.content.Context fcitxCtx = getFcitx5Context();
         if (fcitxCtx != null) {
             ConfigStorage.writeConfigToFile(fcitxCtx,
-                    sbBlur.getProgress(), sbAlpha.getProgress(), sbCorner.getProgress(),
+                    sbBlur.getProgress(), sbAlpha.getProgress(), sbKeyAlpha.getProgress(), sbCorner.getProgress(),
                     swVoice.isChecked(), swLeft.isChecked(), swRight.isChecked(), swKeyBorder.isChecked());
         }
 
@@ -460,6 +468,7 @@ public class SettingsActivity extends Activity {
         intent.putExtra("key_border", swKeyBorder.isChecked());
         intent.putExtra("blur_radius", sbBlur.getProgress());
         intent.putExtra("bg_alpha", sbAlpha.getProgress());
+        intent.putExtra("key_alpha", sbKeyAlpha.getProgress());
         intent.putExtra("corner_radius", sbCorner.getProgress());
         try { sendBroadcast(intent); } catch (Exception ignored) {}
     }

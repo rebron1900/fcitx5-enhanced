@@ -50,7 +50,7 @@ public class KeyEffectsHelper {
             final ViewGroup wmView = (ViewGroup) gv.invoke(wm);
             if (wmView == null) return;
 
-            int keyAlpha = Math.min(c.alpha + 80, 200);
+            int keyAlpha = c.keyAlpha;  // 使用独立的按键透明度配置
 
             // 移除旧 listener
             removeOldListener();
