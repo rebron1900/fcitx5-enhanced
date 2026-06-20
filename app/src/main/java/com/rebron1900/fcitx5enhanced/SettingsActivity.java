@@ -136,6 +136,9 @@ public class SettingsActivity extends Activity {
             svSyncLog.post(() -> svSyncLog.fullScroll(View.FOCUS_DOWN));
         }
 
+        // 显示最近同步记录
+        loadSyncStatus();
+
         setupSyncTab();
 
         loadSettings();
@@ -220,6 +223,7 @@ public class SettingsActivity extends Activity {
                     btnSyncNow.setEnabled(true);
                     stopLogPolling();
                     refreshLog();
+                    loadSyncStatus();
                 });
             });
         });
@@ -247,6 +251,18 @@ public class SettingsActivity extends Activity {
         if (!log.isEmpty()) {
             tvSyncLog.setText(log);
             svSyncLog.post(() -> svSyncLog.fullScroll(View.FOCUS_DOWN));
+        }
+    }
+
+    private void loadSyncStatus() {
+        long lastTime = ConfigStorage.getLastSyncTime(this);
+        String lastResult = ConfigStorage.getLastSyncResult(this);
+        if (lastTime > 0) {
+            java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault());
+            String timeStr = sdf.format(new java.util.Date(lastTime));
+            tvSyncStatus.setText("最近: " + timeStr + " " + lastResult);
+        } else {
+            tvSyncStatus.setText("尚未同步");
         }
     }
 

@@ -86,7 +86,7 @@ public class MainHook extends XposedModule {
                 return null;
             });
 
-            // 键盘弹出时重读配置（兼容小企鹅重载按钮 + NPatch）
+            // 键盘弹出时重读配置 + 检查定时同步
             Method onWindowShown = svc.getMethod("onWindowShown");
             hook(onWindowShown).intercept(chain -> {
                 chain.proceed();
@@ -96,6 +96,8 @@ public class MainHook extends XposedModule {
                         readConfig(cv);
                         applyAllEffects(cv);
                     });
+                    // 检查是否该同步了
+                    checkAndRunSync(cv.getContext());
                 }
                 return null;
             });
@@ -436,6 +438,38 @@ public class MainHook extends XposedModule {
             if (cv != null) cv.post(() -> applyAllEffects(cv));
         } catch (Throwable t) {
             Log.w(TAG, "reapplyFromProvider failed: " + t);
+        }
+    }
+
+    // ══════════════════════════════════════════
+    //  定时同步检查（键盘弹出时触发）
+    // ══════════════════════════════════════════
+
+    private void checkAndRunSync(android.content.Context ctx) {
+        try {
+            if (!ConfigStorage.isWebDavEnabled(ctx)) return;
+
+            long lastSync = ConfigStorage.getLastSyncTime(ctx);
+            int intervalMs = ConfigStorage.getSyncInterval(ctx) * 60 * 1000;
+            long now = System.currentTimeMillis();
+
+            if (now - lastSync < intervalMs) return;
+
+            Log.i(TAG, "sync triggered by keyboard show");
+            new Thread(() -> {
+                try {
+                    com.rebron1900.fcitx5enhanced.sync.WebDavSyncHelper helper =
+                            new com.rebron1900.fcitx5enhanced.sync.WebDavSyncHelper(ctx);
+                    String result = helper.sync();
+                    ConfigStorage.saveLastSyncResult(ctx, result, System.currentTimeMillis());
+                    Log.i(TAG, "sync done: " + result);
+                } catch (Exception e) {
+                    ConfigStorage.saveLastSyncResult(ctx, "失败: " + e.getMessage(), System.currentTimeMillis());
+                    Log.w(TAG, "sync failed: " + e);
+                }
+            }, "rime-webdav-sync").start();
+        } catch (Exception e) {
+            Log.w(TAG, "checkAndRunSync failed: " + e);
         }
     }
 
