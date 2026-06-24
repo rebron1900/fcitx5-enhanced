@@ -106,9 +106,9 @@ public class ConfigStorage {
     // ══════════════════════════════════════════
 
     private static final String SYNC_PREFS = "fcitx5_webdav_sync";
-    private static final String DEFAULT_WEBDAV_URL = "https://REDACTED/dav/rime-sync/";
-    private static final String DEFAULT_WEBDAV_USER = "REDACTED";
-    private static final String DEFAULT_WEBDAV_PASS = "REDACTED";
+    private static final String DEFAULT_WEBDAV_URL = "";
+    private static final String DEFAULT_WEBDAV_USER = "";
+    private static final String DEFAULT_WEBDAV_PASS = "";
     private static final int DEFAULT_INTERVAL = 30; // 分钟
 
     public static boolean isWebDavEnabled(Context context) {
