@@ -406,6 +406,39 @@
                     android:layout_marginTop="4dp" />
             </LinearLayout>
 
+            <!-- Card: RIME 数据目录 -->
+            <LinearLayout
+                android:id="@+id/card_sync_dir"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:background="#fff"
+                android:padding="16dp"
+                android:layout_marginBottom="12dp">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="RIME 数据目录"
+                    android:textSize="15sp"
+                    android:textColor="#333"
+                    android:layout_marginBottom="8dp" />
+                <Spinner
+                    android:id="@+id/spinner_sync_dir"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:background="@android:drawable/btn_dropdown"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="选择 fcitx5 的 RIME sync 目录，两个版本都装了就选你要同步的那个"
+                    android:textSize="12sp"
+                    android:textColor="#999"
+                    android:layout_marginTop="4dp" />
+            </LinearLayout>
+
             <!-- Card: WebDAV 地址 -->
             <LinearLayout
                 android:id="@+id/card_sync_url"

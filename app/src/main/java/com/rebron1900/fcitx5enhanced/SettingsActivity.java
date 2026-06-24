@@ -21,6 +21,8 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.SeekBar;
+import android.widget.Spinner;
+import android.widget.ArrayAdapter;
 import android.widget.Switch;
 import android.widget.TextView;
 
@@ -39,6 +41,7 @@ public class SettingsActivity extends Activity {
 
     // Sync tab
     private Switch swSyncEnabled;
+    private Spinner spinnerSyncDir;
     private EditText etSyncUrl, etSyncUser, etSyncPass;
     private SeekBar sbInterval;
     private TextView tvIntervalVal, tvSyncStatus;
@@ -122,6 +125,7 @@ public class SettingsActivity extends Activity {
 
         // === Sync tab controls ===
         swSyncEnabled = findViewById(R.id.sw_sync_enabled);
+        spinnerSyncDir = findViewById(R.id.spinner_sync_dir);
         etSyncUrl = findViewById(R.id.et_sync_url);
         etSyncUser = findViewById(R.id.et_sync_user);
         etSyncPass = findViewById(R.id.et_sync_pass);
@@ -198,6 +202,21 @@ public class SettingsActivity extends Activity {
     // ══════════════════════════════════════════
 
     private void setupSyncTab() {
+        // RIME 目录选择 Spinner
+        ArrayAdapter<String> dirAdapter = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item,
+                ConfigStorage.getSyncDirLabels());
+        dirAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinnerSyncDir.setAdapter(dirAdapter);
+        spinnerSyncDir.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(android.widget.AdapterView<?> parent, View view, int pos, long id) {
+                ConfigStorage.setSyncDirIndex(SettingsActivity.this, pos);
+            }
+            @Override
+            public void onNothingSelected(android.widget.AdapterView<?> parent) {}
+        });
+
         // 同步间隔 SeekBar
         sbInterval.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
@@ -272,6 +291,7 @@ public class SettingsActivity extends Activity {
 
     private void loadSyncSettings() {
         swSyncEnabled.setChecked(ConfigStorage.isWebDavEnabled(this));
+        spinnerSyncDir.setSelection(ConfigStorage.getSyncDirIndex(this));
         etSyncUrl.setText(ConfigStorage.getWebDavUrl(this));
         etSyncUser.setText(ConfigStorage.getWebDavUser(this));
         etSyncPass.setText(ConfigStorage.getWebDavPass(this));

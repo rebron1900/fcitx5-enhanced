@@ -111,6 +111,16 @@ public class ConfigStorage {
     private static final String DEFAULT_WEBDAV_PASS = "";
     private static final int DEFAULT_INTERVAL = 30; // 分钟
 
+    // sync 目录选项
+    private static final String[] SYNC_DIR_PATHS = {
+        "/sdcard/Android/data/org.fcitx.fcitx5.android.fx/files/data/rime/sync",
+        "/sdcard/Android/data/org.fcitx.fcitx5.android/files/data/rime/sync"
+    };
+    private static final String[] SYNC_DIR_LABELS = {
+        "Fcitx5 (.fx)",
+        "Fcitx5 (原版)"
+    };
+
     public static boolean isWebDavEnabled(Context context) {
         return getSyncPrefs(context).getBoolean("webdav_enabled", false);
     }
@@ -157,28 +167,29 @@ public class ConfigStorage {
                 .apply();
     }
 
-    /** 获取 RIME sync 目录 — 直接访问 fcitx5 的数据目录（需 MANAGE_EXTERNAL_STORAGE） */
+    // ══════════════════════════════════════════
+    //  Sync 目录选择
+    // ══════════════════════════════════════════
+
+    public static String[] getSyncDirLabels() {
+        return SYNC_DIR_LABELS;
+    }
+
+    public static int getSyncDirIndex(Context context) {
+        return getSyncPrefs(context).getInt("sync_dir_index", 0);
+    }
+
+    public static void setSyncDirIndex(Context context, int index) {
+        getSyncPrefs(context).edit().putInt("sync_dir_index", index).apply();
+    }
+
+    /** 获取 RIME sync 目录 — 根据用户选择的索引返回对应路径 */
     public static File getRimeSyncDir(Context context) {
-        // 直接用 fcitx5 的 sync 目录（插件有所有文件访问权限）
-        String[] paths = {
-            "/sdcard/Android/data/org.fcitx.fcitx5.android.fx/files/data/rime/sync",
-            "/sdcard/Android/data/org.fcitx.fcitx5.android/files/data/rime/sync"
-        };
-        for (String path : paths) {
-            File dir = new File(path);
-            if (dir.exists() || dir.mkdirs()) {
-                return dir;
-            }
-        }
-        // 备选：共享 Documents 目录
-        File shared = new File("/sdcard/Documents/rime-sync");
-        if (shared.exists() || shared.mkdirs()) {
-            return shared;
-        }
-        // 最后回退：插件目录
-        File fallback = new File(context.getExternalFilesDir(null), "rime-sync");
-        if (!fallback.exists()) fallback.mkdirs();
-        return fallback;
+        int idx = getSyncDirIndex(context);
+        if (idx < 0 || idx >= SYNC_DIR_PATHS.length) idx = 0;
+        File dir = new File(SYNC_DIR_PATHS[idx]);
+        if (!dir.exists()) dir.mkdirs();
+        return dir;
     }
 
     private static android.content.SharedPreferences getSyncPrefs(Context context) {
