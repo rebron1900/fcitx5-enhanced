@@ -477,11 +477,13 @@ public class MainHook extends XposedModule {
                 return;
             }
 
-            Log.i(TAG, "sync triggered, dir=" + syncDir.getAbsolutePath());
+            Log.i(TAG, "sync triggered");
             new Thread(() -> {
                 try {
+                    com.rebron1900.fcitx5enhanced.sync.LocalFileAccess localAccess =
+                            com.rebron1900.fcitx5enhanced.sync.LocalFileAccessFactory.create(ctx);
                     com.rebron1900.fcitx5enhanced.sync.WebDavSyncHelper helper =
-                            new com.rebron1900.fcitx5enhanced.sync.WebDavSyncHelper(ctx);
+                            new com.rebron1900.fcitx5enhanced.sync.WebDavSyncHelper(ctx, localAccess);
                     com.rebron1900.fcitx5enhanced.sync.WebDavSyncHelper.SyncResult result = helper.sync();
                     ConfigStorage.saveLastSyncResult(ctx, result.toToastString(), System.currentTimeMillis());
                     Log.i(TAG, "sync done: " + result.toToastString());

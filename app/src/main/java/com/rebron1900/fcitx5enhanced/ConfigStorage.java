@@ -2,6 +2,7 @@ package com.rebron1900.fcitx5enhanced;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.net.Uri;
 import android.util.Log;
 
 import org.json.JSONObject;
@@ -181,6 +182,20 @@ public class ConfigStorage {
 
     public static void setSyncDirIndex(Context context, int index) {
         getSyncPrefs(context).edit().putInt("sync_dir_index", index).apply();
+    }
+
+    // SAF URI（用户授权的目录）
+    public static Uri getSyncDirUri(Context context) {
+        String uriStr = getSyncPrefs(context).getString("sync_dir_uri", null);
+        return uriStr != null ? Uri.parse(uriStr) : null;
+    }
+
+    public static void setSyncDirUri(Context context, Uri uri) {
+        getSyncPrefs(context).edit().putString("sync_dir_uri", uri.toString()).apply();
+    }
+
+    public static void clearSyncDirUri(Context context) {
+        getSyncPrefs(context).edit().remove("sync_dir_uri").apply();
     }
 
     /** 获取 RIME sync 目录 — 根据用户选择的索引返回对应路径 */

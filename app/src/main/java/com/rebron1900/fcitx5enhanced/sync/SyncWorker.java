@@ -27,7 +27,9 @@ public class SyncWorker extends Worker {
     public Result doWork() {
         Log.i(TAG, "SyncWorker started");
         try {
-            WebDavSyncHelper helper = new WebDavSyncHelper(getApplicationContext());
+            WebDavSyncHelper helper = new WebDavSyncHelper(
+                    getApplicationContext(),
+                    LocalFileAccessFactory.create(getApplicationContext()));
             WebDavSyncHelper.SyncResult result = helper.sync();
             ConfigStorage.saveLastSyncResult(getApplicationContext(), result.toToastString(), System.currentTimeMillis());
             Log.i(TAG, "SyncWorker done: " + result.toToastString());
@@ -38,6 +40,15 @@ public class SyncWorker extends Worker {
             });
 
             return Result.success();
+        } catch (IllegalArgumentException e) {
+            // 配置错误（URL/账号未填），不重试
+            String msg = "同步失败: " + e.getMessage();
+            ConfigStorage.saveLastSyncResult(getApplicationContext(), msg, System.currentTimeMillis());
+            Log.e(TAG, "SyncWorker config error", e);
+            new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                android.widget.Toast.makeText(getApplicationContext(), msg, android.widget.Toast.LENGTH_LONG).show();
+            });
+            return Result.failure();
         } catch (Exception e) {
             ConfigStorage.saveLastSyncResult(getApplicationContext(), "失败: " + e.getMessage(), System.currentTimeMillis());
             Log.e(TAG, "SyncWorker failed", e);

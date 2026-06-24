@@ -71,16 +71,20 @@ public class WebDavSyncHelper {
     private final OkHttpClient client;
     private final String baseUrl;
     private final String credentials;
-    private final File localDir;
+    private final LocalFileAccess localAccess;
     private final ExecutorService executor;
     private long clockOffsetMs = 0; // 服务器时间 - 本地时间
 
-    public WebDavSyncHelper(Context context) {
-        this.baseUrl = ensureTrailingSlash(ConfigStorage.getWebDavUrl(context));
+    public WebDavSyncHelper(Context context, LocalFileAccess localAccess) {
+        String rawUrl = ConfigStorage.getWebDavUrl(context);
+        if (rawUrl == null || rawUrl.trim().isEmpty() || (!rawUrl.startsWith("http://") && !rawUrl.startsWith("https://"))) {
+            throw new IllegalArgumentException("WebDAV URL 未配置或格式无效: " + rawUrl);
+        }
+        this.baseUrl = ensureTrailingSlash(rawUrl.trim());
         this.credentials = Credentials.basic(
                 ConfigStorage.getWebDavUser(context),
                 ConfigStorage.getWebDavPass(context));
-        this.localDir = ConfigStorage.getRimeSyncDir(context);
+        this.localAccess = localAccess;
         this.executor = Executors.newFixedThreadPool(CONCURRENT_UPLOADS);
 
         OkHttpClient.Builder builder = new OkHttpClient.Builder()
@@ -127,7 +131,7 @@ public class WebDavSyncHelper {
     /** 执行一次完整同步。 */
     public SyncResult sync() {
         appendLog("开始同步");
-        appendLog("本地: " + localDir.getAbsolutePath());
+        appendLog("本地: " + localAccess.getDisplayPath());
         appendLog("远端: " + baseUrl);
         int downloaded = 0, uploaded = 0, skipped = 0, failed = 0;
 
@@ -228,8 +232,7 @@ public class WebDavSyncHelper {
 
     /** 增量扫描本地文件，只返回变更的文件 */
     private Map<String, Long> scanLocalIncremental() {
-        Map<String, Long> current = new HashMap<>();
-        scanDir(localDir, "", current);
+        Map<String, Long> current = localAccess.scanAll();
 
         // 如果是首次扫描，返回全部
         if (sCachedLocalFiles.isEmpty()) {
@@ -351,10 +354,8 @@ public class WebDavSyncHelper {
                     return false;
                 }
 
-                File target = new File(localDir, relPath);
-                target.getParentFile().mkdirs();
                 try (InputStream is = response.body().byteStream();
-                     FileOutputStream fos = new FileOutputStream(target)) {
+                     java.io.OutputStream fos = localAccess.openWrite(relPath)) {
                     byte[] buf = new byte[8192];
                     int n;
                     while ((n = is.read(buf)) != -1) {
@@ -373,8 +374,7 @@ public class WebDavSyncHelper {
     /** 上传单个文件，自动创建父目录 */
     private boolean uploadFile(String relPath) {
         try {
-            File file = new File(localDir, relPath);
-            if (!file.exists()) {
+            if (!localAccess.exists(relPath)) {
                 appendLog("✗ 本地不存在: " + relPath);
                 return false;
             }
@@ -388,20 +388,23 @@ public class WebDavSyncHelper {
             }
 
             String url = baseUrl + relPath.replace(" ", "%20");
-            RequestBody body = RequestBody.create(file, MediaType.parse("application/octet-stream"));
-            Request request = new Request.Builder()
-                    .url(url)
-                    .put(body)
-                    .header("Authorization", credentials)
-                    .build();
+            try (InputStream is = localAccess.openRead(relPath)) {
+                byte[] data = readAllBytes(is);
+                RequestBody body = RequestBody.create(data, MediaType.parse("application/octet-stream"));
+                Request request = new Request.Builder()
+                        .url(url)
+                        .put(body)
+                        .header("Authorization", credentials)
+                        .build();
 
-            try (Response response = client.newCall(request).execute()) {
-                if (!response.isSuccessful()) {
-                    appendLog("✗ 上传失败: " + relPath + " HTTP " + response.code());
-                    return false;
+                try (Response response = client.newCall(request).execute()) {
+                    if (!response.isSuccessful()) {
+                        appendLog("✗ 上传失败: " + relPath + " HTTP " + response.code());
+                        return false;
+                    }
+                    appendLog("↑ " + relPath);
+                    return true;
                 }
-                appendLog("↑ " + relPath);
-                return true;
             }
         } catch (Exception e) {
             appendLog("✗ 上传异常: " + relPath + " " + e.getMessage());
@@ -434,32 +437,21 @@ public class WebDavSyncHelper {
 
     /** 备份本地文件 */
     private void backupLocal(String relPath) {
-        File original = new File(localDir, relPath);
-        if (!original.exists()) return;
-
-        String ts = new SimpleDateFormat("yyyyMMdd-HHmm", Locale.getDefault()).format(new Date());
-        File backup = new File(localDir, relPath + ".bak-" + ts);
-        if (original.renameTo(backup)) {
-            appendLog("备份: " + relPath);
-        }
+        localAccess.backup(relPath);
     }
 
     // ══════════════════════════════════════════
-    //  本地扫描
+    //  本地扫描（已迁移到 LocalFileAccess）
     // ══════════════════════════════════════════
 
-    private void scanDir(File dir, String prefix, Map<String, Long> result) {
-        File[] files = dir.listFiles();
-        if (files == null) return;
-
-        for (File f : files) {
-            String name = prefix.isEmpty() ? f.getName() : prefix + "/" + f.getName();
-            if (f.isDirectory()) {
-                scanDir(f, name, result);
-            } else if (f.isFile() && !f.getName().contains(".bak-")) {
-                result.put(name, f.lastModified());
-            }
+    private static byte[] readAllBytes(InputStream is) throws java.io.IOException {
+        java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+        byte[] buf = new byte[8192];
+        int n;
+        while ((n = is.read(buf)) != -1) {
+            bos.write(buf, 0, n);
         }
+        return bos.toByteArray();
     }
 
     // ══════════════════════════════════════════

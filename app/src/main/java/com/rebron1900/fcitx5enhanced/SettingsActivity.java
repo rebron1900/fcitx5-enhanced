@@ -50,6 +50,7 @@ public class SettingsActivity extends Activity {
     private View btnSyncNow;
     private Handler logHandler;
     private boolean logPolling;
+    private TextView tvSyncDirStatus;
 
     // Tab
     private TextView tabTheme, tabSync;
@@ -135,7 +136,18 @@ public class SettingsActivity extends Activity {
         tvSyncLog = findViewById(R.id.tv_sync_log);
         svSyncLog = findViewById(R.id.sv_sync_log);
         btnSyncNow = findViewById(R.id.btn_sync_now);
+        tvSyncDirStatus = findViewById(R.id.tv_sync_dir_status);
         logHandler = new Handler(Looper.getMainLooper());
+
+        // SAF 授权按钮
+        View btnSafGrant = findViewById(R.id.btn_saf_grant);
+        btnSafGrant.setOnClickListener(v -> {
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+            startActivityForResult(intent, REQUEST_SAF_TREE);
+        });
+        updateSyncDirStatus();
 
         // 显示上次日志
         String lastLog = WebDavSyncHelper.getLog();
@@ -491,5 +503,39 @@ public class SettingsActivity extends Activity {
         intent.putExtra("key_alpha", sbKeyAlpha.getProgress());
         intent.putExtra("corner_radius", sbCorner.getProgress());
         try { sendBroadcast(intent); } catch (Exception ignored) {}
+    }
+
+    // ══════════════════════════════════════════
+    //  SAF 目录授权
+    // ══════════════════════════════════════════
+
+    private static final int REQUEST_SAF_TREE = 1002;
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_SAF_TREE && resultCode == RESULT_OK && data != null) {
+            Uri treeUri = data.getData();
+            if (treeUri != null) {
+                // 持久化权限
+                getContentResolver().takePersistableUriPermission(treeUri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+                ConfigStorage.setSyncDirUri(this, treeUri);
+                updateSyncDirStatus();
+                Log.i(TAG, "SAF URI granted: " + treeUri);
+            }
+        }
+    }
+
+    private void updateSyncDirStatus() {
+        Uri uri = ConfigStorage.getSyncDirUri(this);
+        if (uri != null) {
+            tvSyncDirStatus.setText("✓ 已授权: " + uri.getPath());
+            tvSyncDirStatus.setTextColor(0xFF07C160);
+        } else {
+            tvSyncDirStatus.setText("未授权 — 将使用直接文件路径（可能无权限）");
+            tvSyncDirStatus.setTextColor(0xFF999999);
+        }
     }
 }
