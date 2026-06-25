@@ -68,14 +68,15 @@ public class KeyEffectsHelper {
                 removeKeyBorders(wmView);
             }
 
-            // listener 只处理新增按键（如切换键盘布局时新出现的按键）
-            // 不再重复 makeKeysTranslucent（alpha 不变）
+            // listener 处理新增按键（如切换中英文、切换键盘布局时新出现的按键）
             mKeyLayoutListener = () -> {
                 if (sApplying) return;  // 防重入
                 sApplying = true;
                 try {
                     // 重新读取配置（lambda 不能捕获旧 cfg 引用）
                     MainHook.Config fresh = MainHook.readConfigSync(inputView);
+                    // 应用透明度（切换中英文后新建的按键需要重新设置）
+                    makeKeysTranslucent(wmView, fresh.keyAlpha);
                     if (fresh.keyBorder) {
                         addKeyBorders(wmView, fresh, isDark);
                     }
