@@ -68,110 +68,87 @@ jobs:
         with:
           files: Fcitx5Enhanced-*.apk
 
-  sync:
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Get release info
-        id: info
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TAG="${GITHUB_REF_NAME}"
-
-          # Fetch release by tag
-          curl -sf \
-            -H "Authorization: token ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${TAG}" > /tmp/release.json
-
-          NAME=$(jq -r '.name' /tmp/release.json)
-          ASSET_URL=$(jq -r '.assets[0].browser_download_url' /tmp/release.json)
-          ASSET_NAME=$(jq -r '.assets[0].name' /tmp/release.json)
-
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "name=$NAME" >> "$GITHUB_OUTPUT"
-          echo "asset_url=$ASSET_URL" >> "$GITHUB_OUTPUT"
-          echo "asset_name=$ASSET_NAME" >> "$GITHUB_OUTPUT"
-
-          echo "Release: $TAG — $NAME"
-          echo "Asset: $ASSET_NAME"
-
-          if [ "$ASSET_URL" = "null" ] || [ -z "$ASSET_URL" ]; then
-            echo "::error::No APK asset found in release ${TAG}"
-            exit 1
-          fi
-
-      - name: Download APK
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          curl -fSL \
-            -H "Authorization: token ${GH_TOKEN}" \
-            "${{ steps.info.outputs.asset_url }}" \
-            -o "${{ steps.info.outputs.asset_name }}"
-          ls -lh "${{ steps.info.outputs.asset_name }}"
-
       - name: Sync to Xposed repo
+        if: startsWith(github.ref, 'refs/tags/')
         env:
           XPOSED_PAT: ${{ secrets.XPOSED_PAT }}
         run: |
+          if [ -z "$XPOSED_PAT" ]; then
+            echo "::warning::No XPOSED_PAT set — skipping Xposed sync"
+            exit 0
+          fi
+
           XPOSED_REPO="Xposed-Modules-Repo/com.rebron1900.fcitx5enhanced"
-          TAG="${{ steps.info.outputs.tag }}"
+          TAG="${GITHUB_REF_NAME}"
+          APK=$(ls Fcitx5Enhanced-*.apk | head -1)
 
-          # Delete all existing releases
-          EXISTING=$(curl -sf \
+          echo "Syncing $TAG ($APK) to $XPOSED_REPO"
+
+          # Delete existing releases
+          EXISTING=$(curl -s \
             -H "Authorization: token ${XPOSED_PAT}" \
             -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${XPOSED_REPO}/releases")
-          
-          echo "$EXISTING" | jq -r '.[].id' | while read -r RID; do
-            curl -sf -X DELETE \
+            "https://api.github.com/repos/${XPOSED_REPO}/releases") || true
+
+          echo "$EXISTING" | jq -r '.[].id' 2>/dev/null | while read -r RID; do
+            curl -s -X DELETE \
               -H "Authorization: token ${XPOSED_PAT}" \
-              -H "Accept: application/vnd.github.v3+json" \
-              "https://api.github.com/repos/${XPOSED_REPO}/releases/${RID}"
-            echo "Deleted release $RID"
+              "https://api.github.com/repos/${XPOSED_REPO}/releases/${RID}" \
+              && echo "Deleted release $RID" || echo "Failed to delete release $RID"
           done
 
-          # Delete all existing tags
-          EXISTING_TAGS=$(curl -sf \
+          # Delete existing tags
+          EXISTING_TAGS=$(curl -s \
             -H "Authorization: token ${XPOSED_PAT}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/${XPOSED_REPO}/tags")
-          
-          echo "$EXISTING_TAGS" | jq -r '.[].name' | while read -r T; do
-            curl -sf -X DELETE \
+            "https://api.github.com/repos/${XPOSED_REPO}/tags") || true
+
+          echo "$EXISTING_TAGS" | jq -r '.[].name' 2>/dev/null | while read -r T; do
+            curl -s -X DELETE \
               -H "Authorization: token ${XPOSED_PAT}" \
-              -H "Accept: application/vnd.github.v3+json" \
-              "https://api.github.com/repos/${XPOSED_REPO}/git/refs/tags/${T}" 2>/dev/null || true
-            echo "Deleted tag $T"
+              "https://api.github.com/repos/${XPOSED_REPO}/git/refs/tags/${T}" \
+              && echo "Deleted tag $T" || echo "Failed to delete tag $T"
           done
 
-          # Create new release
-          BODY_JSON=$(jq -c '.body' /tmp/release.json)
-          RELEASE_RESPONSE=$(curl -sf \
+          # Create release
+          RELEASE_RESPONSE=$(curl -s -w "\n%{http_code}" \
             -X POST \
             -H "Authorization: token ${XPOSED_PAT}" \
             -H "Accept: application/vnd.github.v3+json" \
+            -H "Content-Type: application/json" \
             "https://api.github.com/repos/${XPOSED_REPO}/releases" \
             -d "{
               \"tag_name\": \"${TAG}\",
-              \"name\": \"${{ steps.info.outputs.name }}\",
-              \"body\": ${BODY_JSON},
+              \"name\": \"${TAG}\",
+              \"body\": \"## ${TAG}\n\nSee [main repo](https://github.com/rebron1900/fcitx5-enhanced/releases/tag/${TAG}) for details.\",
               \"draft\": false,
               \"prerelease\": false
             }")
 
-          NEW_RELEASE_ID=$(echo "$RELEASE_RESPONSE" | jq -r '.id')
-          echo "Created release: $NEW_RELEASE_ID"
+          HTTP_CODE=$(echo "$RELEASE_RESPONSE" | tail -1)
+          BODY=$(echo "$RELEASE_RESPONSE" | sed '$d')
+          NEW_RELEASE_ID=$(echo "$BODY" | jq -r '.id')
 
-          # Upload APK asset
-          curl -sf \
+          echo "Create release: HTTP $HTTP_CODE, ID $NEW_RELEASE_ID"
+
+          if [ "$HTTP_CODE" != "201" ] || [ "$NEW_RELEASE_ID" = "null" ]; then
+            echo "::error::Failed to create release: $BODY"
+            exit 1
+          fi
+
+          # Upload APK
+          UPLOAD_RESPONSE=$(curl -s -w "\n%{http_code}" \
             -X POST \
             -H "Authorization: token ${XPOSED_PAT}" \
             -H "Content-Type: application/vnd.android.package-archive" \
-            "https://uploads.github.com/repos/${XPOSED_REPO}/releases/${NEW_RELEASE_ID}/assets?name=${{ steps.info.outputs.asset_name }}" \
-            --data-binary @${{ steps.info.outputs.asset_name }}
+            "https://uploads.github.com/repos/${XPOSED_REPO}/releases/${NEW_RELEASE_ID}/assets?name=${APK}" \
+            --data-binary @${APK})
+
+          UPLOAD_CODE=$(echo "$UPLOAD_RESPONSE" | tail -1)
+          echo "Upload APK: HTTP $UPLOAD_CODE"
+
+          if [ "$UPLOAD_CODE" != "201" ]; then
+            echo "::error::Failed to upload APK: $(echo "$UPLOAD_RESPONSE" | sed '$d')"
+            exit 1
+          fi
 
           echo "Sync complete: https://github.com/${XPOSED_REPO}/releases/tag/${TAG}"
