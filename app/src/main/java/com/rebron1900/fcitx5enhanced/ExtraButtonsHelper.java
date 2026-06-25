@@ -33,7 +33,7 @@ public class ExtraButtonsHelper {
 
     private static boolean buttonsInitialized;
 
-    public static void add(View inputView, MainHook.Config c) {
+    public static void add(View inputView, MainHook.Config c, MainHook.ThemeInfo ti) {
         try {
             Method getKv = inputView.getClass().getMethod("getKeyboardView");
             final ViewGroup keyboardView = (ViewGroup) getKv.invoke(inputView);
@@ -45,13 +45,11 @@ public class ExtraButtonsHelper {
                 if (ime == null && clip == null && wave == null) {
                     buttonsInitialized = false;
                 } else {
-                    // 重新读取配置（NPatch 兼容：配置可能已更新）
-                    MainHook.Config freshCfg = MainHook.readConfigSync(inputView);
-                    
-                    if (ime != null) ime.setVisibility(freshCfg.leftBtn ? View.VISIBLE : View.GONE);
-                    if (clip != null) clip.setVisibility(freshCfg.rightBtn ? View.VISIBLE : View.GONE);
-                    if (wave != null) wave.setVisibility(freshCfg.voice ? View.VISIBLE : View.GONE);
-                    Log.i(TAG, "toggle btns L=" + freshCfg.leftBtn + " R=" + freshCfg.rightBtn + " V=" + freshCfg.voice);
+                    // 直接用传入的 cfg，不再读 SP/file
+                    if (ime != null) ime.setVisibility(c.leftBtn ? View.VISIBLE : View.GONE);
+                    if (clip != null) clip.setVisibility(c.rightBtn ? View.VISIBLE : View.GONE);
+                    if (wave != null) wave.setVisibility(c.voice ? View.VISIBLE : View.GONE);
+                    Log.i(TAG, "toggle btns L=" + c.leftBtn + " R=" + c.rightBtn + " V=" + c.voice);
                     return;
                 }
             }
@@ -62,17 +60,9 @@ public class ExtraButtonsHelper {
             final int bs = (int) (30 * den + .5f);
             final int mr = (int) (26 * den + .5f);
 
-            int keyFg = 0xFF888888;
-            int accentBg = 0xFF07C160;
-            int keyBgColor = 0xFFF0F0F0;
-            try {
-                Field tf = inputView.getClass().getSuperclass().getDeclaredField("theme");
-                tf.setAccessible(true);
-                Object theme = tf.get(inputView);
-                keyFg = (Integer) theme.getClass().getMethod("getAltKeyTextColor").invoke(theme);
-                accentBg = (Integer) theme.getClass().getMethod("getAccentKeyBackgroundColor").invoke(theme);
-                keyBgColor = (Integer) theme.getClass().getMethod("getKeyBackgroundColor").invoke(theme);
-            } catch (Exception ignored) {}
+            int keyFg = ti.altKeyTextColor != 0 ? ti.altKeyTextColor : 0xFF888888;
+            int accentBg = ti.accentColor != 0 ? ti.accentColor : 0xFF07C160;
+            int keyBgColor = ti.keyBgColor != 0 ? ti.keyBgColor : 0xFFF0F0F0;
             final int accentColor = accentBg;
 
             final int topExtra = Math.round(-10 * den);

@@ -47,6 +47,15 @@ public class MainHook extends XposedModule {
         public boolean keyBorder = true;
     }
 
+    /** 主题信息快照，避免各 Helper 重复反射读 theme */
+    public static class ThemeInfo {
+        public boolean isDark;
+        public int keyBgColor;
+        public int barColor;
+        public int accentColor;
+        public int altKeyTextColor;
+    }
+
     private Config cfg = new Config();
     private boolean receiverRegistered;
     private android.content.BroadcastReceiver mReceiver;
@@ -82,7 +91,16 @@ public class MainHook extends XposedModule {
                     registerConfigObserver(v);
                     mCurrentInputView = v;
                     View fv = v;
-                    v.post(() -> applyAllEffects(fv));
+                    // 用 LayoutChangeListener 确保 view 已 layout 完再 apply
+                    // post() 可能在 layout 之前执行，导致磨砂玻璃等效果失效
+                    fv.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+                        @Override
+                        public void onLayoutChange(View v, int l, int t, int r, int b,
+                                                   int ol, int ot, int or, int ob) {
+                            v.removeOnLayoutChangeListener(this);
+                            v.post(() -> applyAllEffects(fv));
+                        }
+                    });
                 }
                 return null;
             });
@@ -181,22 +199,29 @@ public class MainHook extends XposedModule {
         readConfig(inputView);
         Log.i(TAG, "applyAllEffects start");
 
-        // 检测暗色主题
-        boolean isDark = false;
+        // 一次性提取主题信息，避免各 Helper 重复反射
+        ThemeInfo themeInfo = new ThemeInfo();
         try {
             java.lang.reflect.Field tf = inputView.getClass().getSuperclass()
                     .getDeclaredField("theme");
             tf.setAccessible(true);
             Object theme = tf.get(inputView);
-            java.lang.reflect.Method isDarkM = theme.getClass().getMethod("isDark");
-            isDark = (Boolean) isDarkM.invoke(theme);
+            themeInfo.isDark = (Boolean) theme.getClass().getMethod("isDark").invoke(theme);
+            themeInfo.keyBgColor = (Integer) theme.getClass().getMethod("getKeyBackgroundColor").invoke(theme);
+            themeInfo.barColor = (Integer) theme.getClass().getMethod("getBarColor").invoke(theme);
+            themeInfo.accentColor = (Integer) theme.getClass().getMethod("getAccentKeyBackgroundColor").invoke(theme);
+            themeInfo.altKeyTextColor = (Integer) theme.getClass().getMethod("getAltKeyTextColor").invoke(theme);
         } catch (Exception ignored) {}
 
-        FrostedGlassHelper.apply(inputView, cfg);
+        // 同一份 cfg + themeInfo 传给所有 Helper，避免重复读 SP/file 和反射
+        final MainHook.Config c = cfg;
+        final MainHook.ThemeInfo ti = themeInfo;
+
+        FrostedGlassHelper.apply(inputView, c, ti);
         roundToolbarTop(inputView);
-        PreeditHelper.apply(inputView, cfg);
-        ExtraButtonsHelper.add(inputView, cfg);
-        KeyEffectsHelper.apply(inputView, cfg, isDark);
+        PreeditHelper.apply(inputView, c, ti);
+        ExtraButtonsHelper.add(inputView, c, ti);
+        KeyEffectsHelper.apply(inputView, c, ti.isDark);
 
         Log.i(TAG, "applyAllEffects done");
     }

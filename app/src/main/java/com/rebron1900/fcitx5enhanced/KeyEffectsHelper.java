@@ -29,6 +29,9 @@ public class KeyEffectsHelper {
     /** 缓存 appearanceView 反射结果（View→View），miss 不缓存（反射失败本身就很快） */
     private static final WeakHashMap<View, View> sAppearanceCache = new WeakHashMap<>();
 
+    /** 缓存 Field 对象（Class→Field），避免重复 getDeclaredField */
+    private static final WeakHashMap<Class<?>, Field> sAppearanceFieldCache = new WeakHashMap<>();
+
     /** 缓存资源 ID，避免每次 getIdentifier 查找 */
     private static int sIdReturn = -1;
     private static int sIdSwitch = -1;
@@ -36,6 +39,15 @@ public class KeyEffectsHelper {
 
     /** 标记 listener 中是否正在执行，防止重入 */
     private static boolean sApplying = false;
+
+    /** 记录上次遍历的 childCount，避免无变化时重复遍历 */
+    private static int sLastChildCount = -1;
+
+    /** 记录上次的 wmView，检测 InputView 是否变化 */
+    private static ViewGroup sLastWmView = null;
+
+    /** 记录上次的 keyBorder 状态，检测是否变化 */
+    private static boolean sLastKeyBorder = false;
 
     /** 每次 apply 时从 SP 读取的主题参数（不缓存，保证实时性） */
     private static int sKeyRadius = 4;
@@ -50,36 +62,32 @@ public class KeyEffectsHelper {
             final ViewGroup wmView = (ViewGroup) gv.invoke(wm);
             if (wmView == null) return;
 
-            int keyAlpha = c.keyAlpha;  // 使用独立的按键透明度配置
+            int keyAlpha = c.keyAlpha;
 
             // 移除旧 listener
             removeOldListener();
 
-            // 清除旧缓存（主题切换后 view 全换了，旧标记无效）
-            sBorderedViews.clear();
-            sOriginalForegrounds.clear();
-            sAppearanceCache.clear();
-
-            // 初次应用 — 只做一次，不靠 listener
-            makeKeysTranslucent(wmView, keyAlpha);
-            if (c.keyBorder) {
-                addKeyBorders(wmView, c, isDark);
-            } else {
-                removeKeyBorders(wmView);
+            // 只在 InputView 变化时清除缓存（新 view 树，旧缓存无效）
+            if (wmView != sLastWmView) {
+                sBorderedViews.clear();
+                sOriginalForegrounds.clear();
+                sAppearanceCache.clear();
+                sLastWmView = wmView;
             }
+            sLastChildCount = -1;
 
-            // listener 处理新增按键（如切换中英文、切换键盘布局时新出现的按键）
+            // 单次遍历完成透明度+描边，避免两次全树遍历
+            applyKeyEffects(wmView, keyAlpha, c, isDark);
+
+            // listener 处理新增按键和中英文切换
+            // 切换中英文时 fcitx5 会重建按键 view，但 childCount 可能不变
+            // 所以不能用 childCount 脏标记，必须每次 layout 都重做
             mKeyLayoutListener = () -> {
                 if (sApplying) return;  // 防重入
                 sApplying = true;
                 try {
-                    // 重新读取配置（lambda 不能捕获旧 cfg 引用）
-                    MainHook.Config fresh = MainHook.readConfigSync(inputView);
-                    // 应用透明度（切换中英文后新建的按键需要重新设置）
-                    makeKeysTranslucent(wmView, fresh.keyAlpha);
-                    if (fresh.keyBorder) {
-                        addKeyBorders(wmView, fresh, isDark);
-                    }
+                    Log.d(TAG, "layout listener fired, childCount=" + wmView.getChildCount());
+                    applyKeyEffects(wmView, c.keyAlpha, c, isDark);
                 } finally {
                     sApplying = false;
                 }
@@ -154,16 +162,92 @@ public class KeyEffectsHelper {
         }
     }
 
-    /** 带缓存的 appearanceView 查找 */
+    /** 单次遍历完成透明度+描边，避免两次全树遍历 */
+    private static void applyKeyEffects(ViewGroup root, int alpha,
+                                         MainHook.Config c, boolean isDark) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M && alpha > 250) return;
+        boolean needAlpha = alpha <= 250;
+        boolean needBorder = c.keyBorder;
+
+        for (int i = 0; i < root.getChildCount(); i++) {
+            View child = root.getChildAt(i);
+            try {
+                View appView = findAppearanceView(child);
+                if (appView != null) {
+                    // 透明度
+                    if (needAlpha) {
+                        Drawable bg = appView.getBackground();
+                        if (bg != null) {
+                            if (bg instanceof android.graphics.drawable.LayerDrawable) {
+                                android.graphics.drawable.LayerDrawable ld =
+                                    (android.graphics.drawable.LayerDrawable) bg;
+                                for (int j = 0; j < ld.getNumberOfLayers(); j++) {
+                                    Drawable layer = ld.getDrawable(j);
+                                    if (layer != null) layer.setAlpha(alpha);
+                                }
+                            } else {
+                                bg.setAlpha(alpha);
+                            }
+                        }
+                        tryAgainDeeper(appView, alpha);
+                    }
+                    // 描边
+                    if (needBorder) {
+                        if (!sBorderedViews.containsKey(appView)) {
+                            applyKeyGlassBorder(appView, c, isDark);
+                        }
+                    } else {
+                        // keyBorder 关闭时移除已有描边
+                        removeBorderFromView(appView);
+                    }
+                }
+            } catch (Exception ignored) {}
+            if (child instanceof ViewGroup) {
+                applyKeyEffects((ViewGroup) child, alpha, c, isDark);
+            }
+        }
+    }
+
+    /** 移除单个 view 的描边 */
+    private static void removeBorderFromView(View appView) {
+        try {
+            Drawable fg = appView.getForeground();
+            if (fg instanceof android.graphics.drawable.LayerDrawable) {
+                android.graphics.drawable.LayerDrawable ld = (android.graphics.drawable.LayerDrawable) fg;
+                if (ld.getNumberOfLayers() == 2 && ld.getDrawable(0) instanceof GlassBorderDrawable) {
+                    appView.setForeground(ld.getDrawable(1));
+                }
+            } else if (fg instanceof GlassBorderDrawable) {
+                appView.setForeground(null);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    /** 带缓存的 appearanceView 查找（缓存 Field 对象 + 结果） */
     private static View findAppearanceView(View v) {
         View cached = sAppearanceCache.get(v);
         if (cached != null) return cached;
 
         Class<?> c = v.getClass();
         while (c != null && c != Object.class) {
+            // 先查 Field 缓存
+            Field f = sAppearanceFieldCache.get(c);
+            if (f == null) {
+                try {
+                    f = c.getDeclaredField("appearanceView");
+                    f.setAccessible(true);
+                    sAppearanceFieldCache.put(c, f);
+                } catch (NoSuchFieldException ignored) {
+                    sAppearanceFieldCache.put(c, null); // 标记为不存在，避免重复查找
+                    c = c.getSuperclass();
+                    continue;
+                }
+            } else if (f == null) {
+                // 之前已标记为此类无此字段
+                c = c.getSuperclass();
+                continue;
+            }
             try {
-                Field f = c.getDeclaredField("appearanceView");
-                f.setAccessible(true);
                 View result = (View) f.get(v);
                 if (result != null) {
                     sAppearanceCache.put(v, result);
@@ -254,6 +338,11 @@ public class KeyEffectsHelper {
         }
     }
 
+    /** 缓存 GradientDrawable 内部字段（mShape, mRadius） */
+    private static Field sShapeField;
+    private static Field sRadiusField;
+    private static boolean sDrawableFieldsResolved = false;
+
     /** 遍历 drawable 链提取实际圆角和形状 */
     private static KeyBgInfo parseKeyBg(Drawable bg, Context ctx, float den) {
         int hInset = 0, vInset = 0;
@@ -285,11 +374,24 @@ public class KeyEffectsHelper {
             } else if (d instanceof android.graphics.drawable.GradientDrawable) {
                 android.graphics.drawable.GradientDrawable gd = (android.graphics.drawable.GradientDrawable) d;
                 try {
-                    Field shapeField = android.graphics.drawable.GradientDrawable.class
-                            .getDeclaredField("mShape");
-                    shapeField.setAccessible(true);
-                    int shape = shapeField.getInt(gd);
-                    isOval = (shape == android.graphics.drawable.GradientDrawable.OVAL);
+                    // 缓存 Field 对象，避免每次 getDeclaredField
+                    if (!sDrawableFieldsResolved) {
+                        sDrawableFieldsResolved = true;
+                        try {
+                            sShapeField = android.graphics.drawable.GradientDrawable.class
+                                    .getDeclaredField("mShape");
+                            sShapeField.setAccessible(true);
+                        } catch (Exception ignored) {}
+                        try {
+                            sRadiusField = android.graphics.drawable.GradientDrawable.class
+                                    .getDeclaredField("mRadius");
+                            sRadiusField.setAccessible(true);
+                        } catch (Exception ignored) {}
+                    }
+                    if (sShapeField != null) {
+                        int shape = sShapeField.getInt(gd);
+                        isOval = (shape == android.graphics.drawable.GradientDrawable.OVAL);
+                    }
                 } catch (Exception ignored) {}
                 if (Build.VERSION.SDK_INT >= 29) {
                     float[] radii = gd.getCornerRadii();
@@ -299,11 +401,10 @@ public class KeyEffectsHelper {
                 }
                 if (radius == 0) {
                     try {
-                        Field rField = android.graphics.drawable.GradientDrawable.class
-                                .getDeclaredField("mRadius");
-                        rField.setAccessible(true);
-                        float fr = rField.getFloat(gd);
-                        if (fr > 0) radius = fr;
+                        if (sRadiusField != null) {
+                            float fr = sRadiusField.getFloat(gd);
+                            if (fr > 0) radius = fr;
+                        }
                     } catch (Exception ignored) {}
                 }
                 if (radius >= 10000f) {

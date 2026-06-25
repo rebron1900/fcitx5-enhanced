@@ -25,15 +25,15 @@ import java.lang.reflect.Method;
 public class FrostedGlassHelper {
     private static final String TAG = "Fcitx5Enh";
 
-    public static void apply(View inputView, MainHook.Config c) {
-        applyFrostedGlass(inputView, c);
-        applyRoundedCorners(inputView, c);
+    public static void apply(View inputView, MainHook.Config c, MainHook.ThemeInfo ti) {
+        applyFrostedGlass(inputView, c, ti);
+        applyRoundedCorners(inputView, c, ti);
     }
 
     // ══════════════════════════════════════════
     //  毛玻璃 — ViewRootImpl.createBackgroundBlurDrawable()
     // ══════════════════════════════════════════
-    private static void applyFrostedGlass(View inputView, MainHook.Config c) {
+    private static void applyFrostedGlass(View inputView, MainHook.Config c, MainHook.ThemeInfo ti) {
         try {
             ImageView bg = findCustomBackground(inputView);
             if (bg == null) {
@@ -41,19 +41,9 @@ public class FrostedGlassHelper {
                 return;
             }
 
-            // 读取当前主题判断 dark/light + 获取按键底色
-            boolean isDark = false;
-            int keyBgColor = 0;
-            try {
-                Field themeField = inputView.getClass().getSuperclass()
-                        .getDeclaredField("theme");
-                themeField.setAccessible(true);
-                Object theme = themeField.get(inputView);
-                Method isDarkM = theme.getClass().getMethod("isDark");
-                isDark = (Boolean) isDarkM.invoke(theme);
-                Method getKeyBg = theme.getClass().getMethod("getKeyBackgroundColor");
-                keyBgColor = (Integer) getKeyBg.invoke(theme);
-            } catch (Exception ignored) {}
+            // 直接用传入的 ThemeInfo，不再反射
+            boolean isDark = ti.isDark;
+            int keyBgColor = ti.keyBgColor;
 
             Object viewRootImpl = null;
             try {
@@ -158,18 +148,18 @@ public class FrostedGlassHelper {
                     }
                 } else {
                     Log.w(TAG, "createBackgroundBlurDrawable returned null");
-                    fallback(bg, inputView, isDark, c);
+                    fallback(bg, inputView, isDark, c, keyBgColor);
                 }
             } else {
                 Log.w(TAG, "viewRootImpl=" + viewRootImpl + " blur=" + c.blur);
-                fallback(bg, inputView, isDark, c);
+                fallback(bg, inputView, isDark, c, keyBgColor);
             }
         } catch (Throwable t) {
             Log.w(TAG, "frosted glass failed: " + t);
         }
     }
 
-    private static void fallback(ImageView bg, View inputView, boolean isDark, MainHook.Config c) {
+    private static void fallback(ImageView bg, View inputView, boolean isDark, MainHook.Config c, int keyBgColor) {
         try {
             int alpha = c.alpha;
             int w = inputView.getWidth();
@@ -180,17 +170,7 @@ public class FrostedGlassHelper {
                 h = (int) (dm.heightPixels * 0.4f);
             }
 
-            // 尝试读主题按键底色
-            int keyBgColor = 0;
-            try {
-                Field themeField = inputView.getClass().getSuperclass()
-                        .getDeclaredField("theme");
-                themeField.setAccessible(true);
-                Object theme = themeField.get(inputView);
-                Method getKeyBg = theme.getClass().getMethod("getKeyBackgroundColor");
-                keyBgColor = (Integer) getKeyBg.invoke(theme);
-            } catch (Exception ignored) {}
-
+            // 直接用传入的 keyBgColor，不再反射
             Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
             Canvas cnv = new Canvas(out);
 
@@ -248,7 +228,7 @@ public class FrostedGlassHelper {
     //  键盘圆角 — tint 位图填角 + keyboardView 裁剪
     // ══════════════════════════════════════════
 
-    private static void applyRoundedCorners(View inputView, MainHook.Config c) {
+    private static void applyRoundedCorners(View inputView, MainHook.Config c, MainHook.ThemeInfo ti) {
         try {
             if (c.corner <= 0) return;
 
@@ -272,7 +252,7 @@ public class FrostedGlassHelper {
                 View kv = (View) kvField.get(inputView);
                 applyOutline(kv, r);
                 // 渐变描边（前景叠加）——暗色亮色描边
-                addGradientBorder(kv, inputView, c);
+                addGradientBorder(kv, inputView, c, ti);
             } catch (Exception ignored) {}
 
             try {
@@ -380,17 +360,9 @@ public class FrostedGlassHelper {
     }
 
     /** 键盘渐变描边 — View.setForeground + GlassBorderDrawable */
-    private static void addGradientBorder(View keyboardView, View inputView, MainHook.Config c) {
+    private static void addGradientBorder(View keyboardView, View inputView, MainHook.Config c, MainHook.ThemeInfo ti) {
         try {
-            boolean isDark = false;
-            try {
-                java.lang.reflect.Field themeField = inputView.getClass().getSuperclass()
-                        .getDeclaredField("theme");
-                themeField.setAccessible(true);
-                Object theme = themeField.get(inputView);
-                java.lang.reflect.Method isDarkM = theme.getClass().getMethod("isDark");
-                isDark = (Boolean) isDarkM.invoke(theme);
-            } catch (Exception ignored) {}
+            boolean isDark = ti.isDark;
 
             int borderTop, borderBottom;
             float den = inputView.getResources().getDisplayMetrics().density;

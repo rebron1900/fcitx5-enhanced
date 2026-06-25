@@ -24,7 +24,7 @@ public class PreeditHelper {
 
     private static View mRegisteredView;  // 跟踪 listener 注册到哪个 view
 
-    public static void apply(View inputView, MainHook.Config c) {
+    public static void apply(View inputView, MainHook.Config c, MainHook.ThemeInfo ti) {
         try {
             // 查找 preedit root：InputView 的直接子 View，包含 TextView（preedit 文本区域）
             // 先尝试反射（靓企鹅），再遍历子 View（原版 R8 混淆后）
@@ -34,14 +34,8 @@ public class PreeditHelper {
                 return;
             }
 
-            // 读取主题色
-            int bgColor = 0xFF303030;
-            try {
-                Field tf = inputView.getClass().getSuperclass().getDeclaredField("theme");
-                tf.setAccessible(true);
-                Object theme = tf.get(inputView);
-                bgColor = (Integer) theme.getClass().getMethod("getBarColor").invoke(theme);
-            } catch (Exception ignored) {}
+            // 直接用传入的 ThemeInfo，不再反射
+            int bgColor = ti.barColor != 0 ? ti.barColor : 0xFF303030;
 
             float den = inputView.getResources().getDisplayMetrics().density;
             float r = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, c.corner,
