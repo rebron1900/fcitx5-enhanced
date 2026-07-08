@@ -113,7 +113,52 @@ SettingsActivity "立即同步" 按钮
   └─ sendBroadcast(SYNC_TRIGGER) → MainHook 收到 → runSyncOnce()
 ```
 
-## 已知约束
+| 解决方案 | 版本号 + WeakHashMap 避免 InputView 重建后效果丢失 |
+
+## 配置系统（2026-07-08 重构）
+
+```
+ConfigManager (静态类)
+  ├─ AtomicInteger sVersion          — 版本计数器
+  ├─ Map<View,Integer> sLastApplied  — 每个 InputView 上次应用的版本（WeakHashMap 自动清理）
+  ├─ Config 内部类                    — 不可变配置快照（final 字段）
+  ├─ read(Context) → Config           — 从 SP "fcitx5_enhanced_config" 读
+  ├─ write(Context, ...)              — 写 SP + bumpVersion
+  ├─ shouldApply(View) → boolean     — O(1) 版本号对比
+  ├─ resetForView(View)              — 新 InputView 时清除记录
+  └─ bumpVersion()                   — 配置变更时递增
+```
+
+**数据流：**
+```
+SettingsActivity
+  └─ saveAndApply()
+       ├─ ConfigManager.write() → bumpVersion
+       ├─ ConfigStorage.writeConfigToFile() (NPatch 备选)
+       └─ sendBroadcast(UI_UPDATE) → MainHook.BroadcastReceiver
+                                        └─ ConfigManager.write(this) → bumpVersion
+
+MainHook.ContentObserver
+  └─ bumpVersion() (只看增量通知，不读数据)
+
+setInputView hook
+  └─ detect InputView change → ConfigManager.resetForView(newView)
+
+onWindowShown hook
+  └─ ConfigManager.shouldApply() ? applyAllEffects() : skip
+
+ConfigProvider (跨进程 IPC)
+  └─ update() → ConfigManager.write() → bumpVersion + notifyChange
+  └─ query()  → ConfigManager.read()
+```
+
+**核心规则：**
+- 所有写入通道最终汇聚到 ConfigManager.write() → 同一个 SP + 版本号递增
+- applyAllEffects 之前用 shouldApply() 决定是否执行（版本号 O(1)）
+- InputView 重建时 resetForView() 确保下次 apply 必执行
+- `MainHook.Config` 已移除，全部使用 `ConfigManager.Config`
+- `ConfigStorage` 标记 @Deprecated，仅保留 JSON 文件 IO 作为 NPatch 备选通道
+- Bitmap 缓存（FrostedGlassHelper）、按键描边缓存（KeyEffectsHelper）均加版本守卫，配置变化时自动失效
 
 - Android 12+ (API 31+)
 - LSPosed 已激活
