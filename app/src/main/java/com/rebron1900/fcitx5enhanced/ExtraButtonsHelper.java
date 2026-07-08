@@ -33,7 +33,7 @@ public class ExtraButtonsHelper {
 
     private static boolean buttonsInitialized;
 
-    public static void add(View inputView, MainHook.Config c, MainHook.ThemeInfo ti) {
+    public static void add(View inputView, ConfigManager.Config c, MainHook.ThemeInfo ti) {
         try {
             Method getKv = inputView.getClass().getMethod("getKeyboardView");
             final ViewGroup keyboardView = (ViewGroup) getKv.invoke(inputView);

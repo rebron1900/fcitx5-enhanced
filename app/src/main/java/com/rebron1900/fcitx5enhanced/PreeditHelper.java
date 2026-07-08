@@ -24,7 +24,7 @@ public class PreeditHelper {
 
     private static View mRegisteredView;  // 跟踪 listener 注册到哪个 view
 
-    public static void apply(View inputView, MainHook.Config c, MainHook.ThemeInfo ti) {
+    public static void apply(View inputView, ConfigManager.Config c, MainHook.ThemeInfo ti) {
         try {
             // 查找 preedit root：InputView 的直接子 View，包含 TextView（preedit 文本区域）
             // 先尝试反射（靓企鹅），再遍历子 View（原版 R8 混淆后）

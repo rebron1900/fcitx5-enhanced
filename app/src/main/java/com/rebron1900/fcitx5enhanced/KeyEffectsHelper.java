@@ -49,6 +49,9 @@ public class KeyEffectsHelper {
     /** 记录上次的 keyBorder 状态，检测是否变化 */
     private static boolean sLastKeyBorder = false;
 
+    /** 上次应用效果时的 ConfigManager 版本号 */
+    private static int sCachedConfigVersion = -1;
+
     /** 键盘 View 树哈希（快速检测结构变化，避免每次 layout 全量遍历） */
     private static int sLastViewHash = 0;
 
@@ -56,7 +59,16 @@ public class KeyEffectsHelper {
     private static int sKeyRadius = 4;
     private static boolean sSpecialKeyOval = false;
 
-    public static void apply(View inputView, MainHook.Config c, boolean isDark) {
+    public static void apply(View inputView, ConfigManager.Config c, boolean isDark) {
+        // 版本变化时清空所有按键缓存（新 InputView 或配置变更）
+        if (ConfigManager.getVersion() != sCachedConfigVersion) {
+            sBorderedViews.clear();
+            sOriginalForegrounds.clear();
+            sAppearanceCache.clear();
+            sLastViewHash = 0;
+            sCachedConfigVersion = ConfigManager.getVersion();
+            Log.d(TAG, "config version changed, cleared caches");
+        }
         try {
             Field wf = inputView.getClass().getDeclaredField("windowManager");
             wf.setAccessible(true);
@@ -185,7 +197,7 @@ public class KeyEffectsHelper {
 
     /** 单次遍历完成透明度+描边，避免两次全树遍历 */
     private static void applyKeyEffects(ViewGroup root, int alpha,
-                                         MainHook.Config c, boolean isDark) {
+                                         ConfigManager.Config c, boolean isDark) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M && alpha > 250) return;
         boolean needAlpha = alpha <= 250;
         boolean needBorder = c.keyBorder;
@@ -303,7 +315,7 @@ public class KeyEffectsHelper {
     // ══════════════════════════════════════════
 
     /** 遍历键盘视图树，给每个按键的 appearanceView 加玻璃描边。 */
-    private static void addKeyBorders(ViewGroup root, MainHook.Config c, boolean isDark) {
+    private static void addKeyBorders(ViewGroup root, ConfigManager.Config c, boolean isDark) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
         for (int i = 0; i < root.getChildCount(); i++) {
             View child = root.getChildAt(i);
@@ -450,7 +462,7 @@ public class KeyEffectsHelper {
     }
 
     /** 给单个按键套上描边 foreground */
-    private static void applyKeyGlassBorder(View keyView, MainHook.Config c, boolean isDark) {
+    private static void applyKeyGlassBorder(View keyView, ConfigManager.Config c, boolean isDark) {
         try {
             float den = keyView.getResources().getDisplayMetrics().density;
 

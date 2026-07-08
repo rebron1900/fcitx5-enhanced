@@ -37,7 +37,10 @@ public class FrostedGlassHelper {
     private static int sCachedTintW = -1, sCachedTintH = -1;
     private static int sCachedTintCfg = 0;  // blur+alpha+corner+keyBgColor+isDark 混合指纹
 
-    public static void apply(View inputView, MainHook.Config c, MainHook.ThemeInfo ti) {
+    /** 上次生成 bitmap 时的 ConfigManager 版本号 */
+    private static int sCachedConfigVersion = -1;
+
+    public static void apply(View inputView, ConfigManager.Config c, MainHook.ThemeInfo ti) {
         applyFrostedGlass(inputView, c, ti);
         applyRoundedCorners(inputView, c, ti);
     }
@@ -45,7 +48,7 @@ public class FrostedGlassHelper {
     // ══════════════════════════════════════════
     //  毛玻璃 — ViewRootImpl.createBackgroundBlurDrawable()
     // ══════════════════════════════════════════
-    private static void applyFrostedGlass(View inputView, MainHook.Config c, MainHook.ThemeInfo ti) {
+    private static void applyFrostedGlass(View inputView, ConfigManager.Config c, MainHook.ThemeInfo ti) {
         try {
             ImageView bg = findCustomBackground(inputView);
             if (bg == null) {
@@ -82,6 +85,18 @@ public class FrostedGlassHelper {
                     int alpha = c.alpha;
                     int w = Math.max(1, bg.getWidth());
                     int h = Math.max(1, bg.getHeight());
+
+                    // 版本变化时回收 bitmap 缓存（InputView 重建会触发版本重置）
+                    if (ConfigManager.getVersion() != sCachedConfigVersion) {
+                        if (sCachedTintBitmap != null && !sCachedTintBitmap.isRecycled()) {
+                            sCachedTintBitmap.recycle();
+                        }
+                        sCachedTintBitmap = null;
+                        sCachedTintW = -1;
+                        sCachedTintH = -1;
+                        sCachedTintCfg = 0;
+                        sCachedConfigVersion = ConfigManager.getVersion();
+                    }
 
                     // 计算指纹：alpha + corner + w + h + keyBgColor + isDark
                     int tintFp = alpha ^ (c.corner << 8) ^ (w << 12) ^ (h << 18)
@@ -193,7 +208,7 @@ public class FrostedGlassHelper {
         }
     }
 
-    private static void fallback(ImageView bg, View inputView, boolean isDark, MainHook.Config c, int keyBgColor) {
+    private static void fallback(ImageView bg, View inputView, boolean isDark, ConfigManager.Config c, int keyBgColor) {
         try {
             int alpha = c.alpha;
             int w = inputView.getWidth();
@@ -202,6 +217,18 @@ public class FrostedGlassHelper {
                 DisplayMetrics dm = inputView.getResources().getDisplayMetrics();
                 w = dm.widthPixels;
                 h = (int) (dm.heightPixels * 0.4f);
+            }
+
+            // 版本变化时回收 bitmap 缓存（InputView 重建会触发版本重置）
+            if (ConfigManager.getVersion() != sCachedConfigVersion) {
+                if (sCachedTintBitmap != null && !sCachedTintBitmap.isRecycled()) {
+                    sCachedTintBitmap.recycle();
+                }
+                sCachedTintBitmap = null;
+                sCachedTintW = -1;
+                sCachedTintH = -1;
+                sCachedTintCfg = 0;
+                sCachedConfigVersion = ConfigManager.getVersion();
             }
 
             // 直接用传入的 keyBgColor，不再反射
@@ -279,7 +306,7 @@ public class FrostedGlassHelper {
     //  键盘圆角 — tint 位图填角 + keyboardView 裁剪
     // ══════════════════════════════════════════
 
-    private static void applyRoundedCorners(View inputView, MainHook.Config c, MainHook.ThemeInfo ti) {
+    private static void applyRoundedCorners(View inputView, ConfigManager.Config c, MainHook.ThemeInfo ti) {
         try {
             if (c.corner <= 0) return;
 
@@ -411,7 +438,7 @@ public class FrostedGlassHelper {
     }
 
     /** 键盘渐变描边 — View.setForeground + GlassBorderDrawable */
-    private static void addGradientBorder(View keyboardView, View inputView, MainHook.Config c, MainHook.ThemeInfo ti) {
+    private static void addGradientBorder(View keyboardView, View inputView, ConfigManager.Config c, MainHook.ThemeInfo ti) {
         try {
             boolean isDark = ti.isDark;
 

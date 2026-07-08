@@ -5,15 +5,14 @@ import android.os.Build;
 import android.util.Log;
 import android.util.TypedValue;
 import android.view.View;
-import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.ViewParent;
 import android.graphics.Color;
 import android.graphics.Outline;
 import android.graphics.Path;
-import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 
@@ -34,27 +33,6 @@ public class MainHook extends XposedModule {
     /** 当前运行的包名（用于判断是原版还是靓企鹅） */
     private String mRunningPkg;
 
-    /** 配置快照，传递给各 Helper */
-    public static class Config {
-        public int blur = 100;
-        public int alpha = 60;
-        public int keyAlpha = 140;  // 按键背景透明度（独立于键盘背景）
-        public int corner = 20;
-        public int toolbar = 20;
-        public boolean voice = true;
-        public boolean leftBtn = true;
-        public boolean rightBtn = true;
-        public boolean keyBorder = true;
-
-        /** 快速比较配置是否相等（避免不必要的全量重绘） */
-        public boolean equals(Config o) {
-            return o != null
-                && blur == o.blur && alpha == o.alpha && keyAlpha == o.keyAlpha
-                && corner == o.corner && keyBorder == o.keyBorder
-                && leftBtn == o.leftBtn && rightBtn == o.rightBtn && voice == o.voice;
-        }
-    }
-
     /** 主题信息快照，避免各 Helper 重复反射读 theme */
     public static class ThemeInfo {
         public boolean isDark;
@@ -64,15 +42,16 @@ public class MainHook extends XposedModule {
         public int altKeyTextColor;
     }
 
-    private Config cfg = new Config();
+    private WeakReference<View> mCurrentInputViewRef;
     private boolean receiverRegistered;
     private android.content.BroadcastReceiver mReceiver;
-    private View mCurrentInputView;
-    private android.content.SharedPreferences.OnSharedPreferenceChangeListener mThemePrefListener;
+    private SharedPreferences.OnSharedPreferenceChangeListener mThemePrefListener;
+    private android.database.ContentObserver mConfigObserver;
     private boolean mConfigObserved;
 
-    /** 上次全量应用时的配置快照（用于跳过配置未变时的重复调用） */
-    private static final Config sLastAppliedCfg = new Config();
+    private View getCurrentInputView() {
+        return mCurrentInputViewRef != null ? mCurrentInputViewRef.get() : null;
+    }
 
     // ══════════════════════════════════════════
     //  Hook 入口
@@ -96,37 +75,39 @@ public class MainHook extends XposedModule {
                 String viewName = v != null ? v.getClass().getName() : "null";
                 Log.i(TAG, "setInputView view=" + viewName);
                 if (v != null && CLS_IV.equals(v.getClass().getName())) {
-                    readConfig(v);
+                    View oldView = getCurrentInputView();
+                    if (v != oldView) {
+                        ConfigManager.resetForView(v);
+                    }
+                    mCurrentInputViewRef = new WeakReference<>(v);
                     if (!receiverRegistered) registerReapplyReceiver(v);
                     registerThemePrefListener(v);
                     registerConfigObserver(v);
-                    mCurrentInputView = v;
-                    View fv = v;
                     // 用 LayoutChangeListener 确保 view 已 layout 完再 apply
                     // post() 可能在 layout 之前执行，导致磨砂玻璃等效果失效
-                    fv.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+                    v.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
                         @Override
                         public void onLayoutChange(View v, int l, int t, int r, int b,
                                                    int ol, int ot, int or, int ob) {
                             v.removeOnLayoutChangeListener(this);
-                            v.post(() -> applyAllEffects(fv));
+                            v.post(() -> applyAllEffects(v));
                         }
                     });
                 }
                 return null;
             });
 
-            // 键盘弹出时重读配置 + 检查定时同步
+            // 键盘弹出时检查是否需要应用效果 + 检查定时同步
             Method onWindowShown = svc.getMethod("onWindowShown");
             hook(onWindowShown).intercept(chain -> {
                 chain.proceed();
-                View cv = mCurrentInputView;
+                View cv = getCurrentInputView();
                 if (cv != null) {
                     cv.post(() -> {
-                        readConfig(cv);
-                        applyAllEffects(cv);
+                        if (ConfigManager.shouldApply(cv)) {
+                            applyAllEffects(cv);
+                        }
                     });
-                    // 检查是否该同步了
                     checkAndRunSync(cv.getContext());
                 }
                 return null;
@@ -139,117 +120,19 @@ public class MainHook extends XposedModule {
     }
 
     // ══════════════════════════════════════════
-    //  Config — 文件优先，SP 备选
-    // ══════════════════════════════════════════
-
-    /** 同步读取配置（供 ExtraButtonsHelper 等外部调用） */
-    public static Config readConfigSync(View anyView) {
-        Config config = new Config();
-        try {
-            // 1. 文件优先（NPatch 兼容）
-            if (ConfigStorage.configFileExists(anyView.getContext())) {
-                ConfigManager.Config fileCfg = ConfigStorage.readConfigFromFile(anyView.getContext());
-                config = new Config();
-                config.blur = fileCfg.blur;
-                config.alpha = fileCfg.alpha;
-                config.keyAlpha = fileCfg.keyAlpha;
-                config.corner = fileCfg.corner;
-                config.toolbar = fileCfg.toolbar;
-                config.voice = fileCfg.voice;
-                config.leftBtn = fileCfg.leftBtn;
-                config.rightBtn = fileCfg.rightBtn;
-                config.keyBorder = fileCfg.keyBorder;
-                Log.i(TAG, "readConfigSync from file: L=" + config.leftBtn + " R=" + config.rightBtn);
-                return config;
-            }
-
-            // 2. SP 备选（LSPosed 兼容）
-            SharedPreferences sp = anyView.getContext()
-                    .getSharedPreferences("fcitx5_enhanced_config", android.content.Context.MODE_PRIVATE);
-            config.blur = sp.getInt("blur_radius", 100);
-            config.alpha = sp.getInt("bg_alpha", 60);
-            config.keyAlpha = sp.getInt("key_alpha", 140);
-            config.corner = sp.getInt("corner_radius", 20);
-            config.toolbar = config.corner;
-            config.voice = sp.getBoolean("voice_enabled", true);
-            config.leftBtn = sp.getBoolean("show_left_button", true);
-            config.rightBtn = sp.getBoolean("show_right_button", true);
-            config.keyBorder = sp.getBoolean("key_border", true);
-            Log.i(TAG, "readConfigSync from SP: L=" + config.leftBtn + " R=" + config.rightBtn);
-        } catch (Throwable t) {
-            Log.w(TAG, "readConfigSync failed: " + t);
-        }
-        return config;
-    }
-
-    private void readConfig(View anyView) {
-        try {
-            // 1. 文件优先（NPatch 兼容）
-            if (ConfigStorage.configFileExists(anyView.getContext())) {
-                ConfigManager.Config fileCfg = ConfigStorage.readConfigFromFile(anyView.getContext());
-                cfg = new Config();
-                cfg.blur = fileCfg.blur;
-                cfg.alpha = fileCfg.alpha;
-                cfg.keyAlpha = fileCfg.keyAlpha;
-                cfg.corner = fileCfg.corner;
-                cfg.toolbar = fileCfg.toolbar;
-                cfg.voice = fileCfg.voice;
-                cfg.leftBtn = fileCfg.leftBtn;
-                cfg.rightBtn = fileCfg.rightBtn;
-                cfg.keyBorder = fileCfg.keyBorder;
-                Log.i(TAG, "read from file: L=" + cfg.leftBtn + " R=" + cfg.rightBtn);
-                return;
-            }
-
-            // 2. SP 备选（LSPosed 兼容）
-            SharedPreferences sp = anyView.getContext()
-                    .getSharedPreferences("fcitx5_enhanced_config", android.content.Context.MODE_PRIVATE);
-            cfg.blur = sp.getInt("blur_radius", 100);
-            cfg.alpha = sp.getInt("bg_alpha", 60);
-            cfg.keyAlpha = sp.getInt("key_alpha", 140);
-            cfg.corner = sp.getInt("corner_radius", 20);
-            cfg.toolbar = cfg.corner;
-            cfg.voice = sp.getBoolean("voice_enabled", true);
-            cfg.leftBtn = sp.getBoolean("show_left_button", true);
-            cfg.rightBtn = sp.getBoolean("show_right_button", true);
-            cfg.keyBorder = sp.getBoolean("key_border", true);
-            Log.i(TAG, "read from SP: L=" + cfg.leftBtn + " R=" + cfg.rightBtn);
-        } catch (Throwable t) {
-            Log.w(TAG, "readConfig failed: " + t);
-            cfg = new Config();
-        }
-    }
-
-    // ══════════════════════════════════════════
     //  Apply all visual effects
     // ══════════════════════════════════════════
 
     private void applyAllEffects(View inputView) {
-        readConfig(inputView);
-
-        // 配置未变 + 同一 InputView → 跳过全量重绘（性能优化）
-        // Broadcast/Provider/Theme 变更路径在调用前已更新 cfg，此处自然放行
-        if (sLastAppliedCfg.equals(cfg)) {
-            Log.d(TAG, "applyAllEffects: config unchanged, skip");
-            return;
-        }
-        // 更新快照
-        sLastAppliedCfg.blur = cfg.blur;
-        sLastAppliedCfg.alpha = cfg.alpha;
-        sLastAppliedCfg.keyAlpha = cfg.keyAlpha;
-        sLastAppliedCfg.corner = cfg.corner;
-        sLastAppliedCfg.toolbar = cfg.toolbar;
-        sLastAppliedCfg.voice = cfg.voice;
-        sLastAppliedCfg.leftBtn = cfg.leftBtn;
-        sLastAppliedCfg.rightBtn = cfg.rightBtn;
-        sLastAppliedCfg.keyBorder = cfg.keyBorder;
+        // ConfigManager.shouldApply 已在调用处检查，此处不需要再检查
+        ConfigManager.Config cfg = ConfigManager.read(inputView.getContext());
 
         Log.i(TAG, "applyAllEffects start");
 
         // 一次性提取主题信息，避免各 Helper 重复反射
         ThemeInfo themeInfo = new ThemeInfo();
         try {
-            java.lang.reflect.Field tf = inputView.getClass().getSuperclass()
+            Field tf = inputView.getClass().getSuperclass()
                     .getDeclaredField("theme");
             tf.setAccessible(true);
             Object theme = tf.get(inputView);
@@ -261,11 +144,11 @@ public class MainHook extends XposedModule {
         } catch (Exception ignored) {}
 
         // 同一份 cfg + themeInfo 传给所有 Helper，避免重复读 SP/file 和反射
-        final MainHook.Config c = cfg;
+        final ConfigManager.Config c = cfg;
         final MainHook.ThemeInfo ti = themeInfo;
 
         FrostedGlassHelper.apply(inputView, c, ti);
-        roundToolbarTop(inputView);
+        roundToolbarTop(inputView, cfg);
         PreeditHelper.apply(inputView, c, ti);
         ExtraButtonsHelper.add(inputView, c, ti);
         KeyEffectsHelper.apply(inputView, c, ti.isDark);
@@ -277,7 +160,7 @@ public class MainHook extends XposedModule {
     //  工具栏圆角
     // ══════════════════════════════════════════
 
-    private void roundToolbarTop(View inputView) {
+    private void roundToolbarTop(View inputView, ConfigManager.Config cfg) {
         try {
             if (cfg.toolbar <= 0) return;
 
@@ -298,20 +181,20 @@ public class MainHook extends XposedModule {
             Method gv = bar.getClass().getMethod("getView");
             View toolbar = (View) gv.invoke(bar);
 
-            roundToolbarTopWithRetry(inputView, toolbar, 0);
+            roundToolbarTopWithRetry(inputView, toolbar, 0, cfg);
         } catch (Throwable t) {
             Log.w(TAG, "toolbar round failed: " + t);
         }
     }
 
-    private void roundToolbarTopWithRetry(View inputView, View toolbar, int attempt) {
+    private void roundToolbarTopWithRetry(View inputView, View toolbar, int attempt, ConfigManager.Config cfg) {
         try {
             if (attempt > 5) {
                 Log.w(TAG, "toolbar retry exhausted, skip");
                 return;
             }
             if (toolbar.getWidth() <= 0 || toolbar.getHeight() <= 0) {
-                toolbar.post(() -> roundToolbarTopWithRetry(inputView, toolbar, attempt + 1));
+                toolbar.post(() -> roundToolbarTopWithRetry(inputView, toolbar, attempt + 1, cfg));
                 return;
             }
 
@@ -373,32 +256,18 @@ public class MainHook extends XposedModule {
                         boolean bK = intent.getBooleanExtra("key_border", true);
                         Log.i(TAG, "BROADCAST payload: L=" + bL + " R=" + bR + " V=" + bV + " K=" + bK);
 
-                        try {
-                            SharedPreferences sp = context
-                                    .getSharedPreferences("fcitx5_enhanced_config", android.content.Context.MODE_PRIVATE);
-                            sp.edit()
-                                .putBoolean("show_left_button", bL)
-                                .putBoolean("show_right_button", bR)
-                                .putBoolean("voice_enabled", bV)
-                                .putInt("blur_radius", bB)
-                                .putInt("bg_alpha", bA)
-                                .putInt("key_alpha", bKA)
-                                .putInt("corner_radius", bC)
-                                .putBoolean("key_border", bK)
-                                .commit();
-                        } catch (Throwable t) {
-                            Log.w(TAG, "save to fcitx5 SP failed: " + t);
-                        }
-
-                        cfg.leftBtn = bL; cfg.rightBtn = bR; cfg.voice = bV;
-                        cfg.blur = bB; cfg.alpha = bA; cfg.corner = bC; cfg.toolbar = bC; cfg.keyBorder = bK;
-                        View curView = mCurrentInputView;
+                        ConfigManager.write(context, bB, bA, bKA, bC,
+                                bV, bL, bR, bK);
+                        View curView = getCurrentInputView();
                         if (curView != null) curView.post(() -> applyAllEffects(curView));
                     } else {
                         Log.w(TAG, "BROADCAST without extras, reading from SP");
-                        readConfig(v);
-                        View curView2 = mCurrentInputView;
-                        if (curView2 != null) curView2.post(() -> applyAllEffects(curView2));
+                        View curView2 = getCurrentInputView();
+                        if (curView2 != null) curView2.post(() -> {
+                            if (ConfigManager.shouldApply(curView2)) {
+                                applyAllEffects(curView2);
+                            }
+                        });
                     }
                 }
             };
@@ -411,10 +280,7 @@ public class MainHook extends XposedModule {
             v.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
                 @Override public void onViewAttachedToWindow(View v) {}
                 @Override public void onViewDetachedFromWindow(View v) {
-                    try { v.getContext().unregisterReceiver(mReceiver); } catch (Exception ignored) {}
-                    receiverRegistered = false;
-                    mReceiver = null;
-                    mCurrentInputView = null;  // 清除旧引用，防止 stale view
+                    cleanup();
                     v.removeOnAttachStateChangeListener(this);
                 }
             });
@@ -433,20 +299,20 @@ public class MainHook extends XposedModule {
     private void registerThemePrefListener(View anyView) {
         try {
             if (mThemePrefListener != null) return; // 只注册一次
-            android.content.SharedPreferences sp =
+            SharedPreferences sp =
                 android.preference.PreferenceManager.getDefaultSharedPreferences(
                     anyView.getContext());
             mThemePrefListener = (sp_, key) -> {
                 try {
                     if ("key_radius".equals(key) || "special_key_oval_shape".equals(key)) {
                         Log.i(TAG, key + " changed, re-applying key borders");
-                        View cv = mCurrentInputView;
+                        View cv = getCurrentInputView();
                         if (cv != null) cv.post(() -> {
-                            readConfig(cv);
+                            ConfigManager.Config cfg = ConfigManager.read(cv.getContext());
                             // 只重载按键描边，不必全量 apply
                             boolean isDark = false;
                             try {
-                                java.lang.reflect.Field tf = cv.getClass().getSuperclass()
+                                Field tf = cv.getClass().getSuperclass()
                                         .getDeclaredField("theme");
                                 tf.setAccessible(true);
                                 Object theme = tf.get(cv);
@@ -475,14 +341,16 @@ public class MainHook extends XposedModule {
         if (mConfigObserved) return;
         try {
             android.net.Uri uri = android.net.Uri.parse("content://com.rebron1900.fcitx5enhanced.config");
+            mConfigObserver = new android.database.ContentObserver(null) {
+                @Override
+                public void onChange(boolean selfChange) {
+                    ConfigManager.bumpVersion();
+                    View cv = getCurrentInputView();
+                    if (cv != null) cv.post(() -> applyAllEffects(cv));
+                }
+            };
             anyView.getContext().getContentResolver().registerContentObserver(
-                    uri, false, new android.database.ContentObserver(null) {
-                        @Override
-                        public void onChange(boolean selfChange) {
-                            View cv = mCurrentInputView;
-                            if (cv != null) reapplyFromProvider(cv);
-                        }
-                    });
+                    uri, false, mConfigObserver);
             mConfigObserved = true;
             Log.i(TAG, "config observer registered");
         } catch (Throwable t) {
@@ -490,33 +358,42 @@ public class MainHook extends XposedModule {
         }
     }
 
-    /** 从 ConfigProvider 读取配置并应用。 */
-    private void reapplyFromProvider(View anyView) {
+    // ══════════════════════════════════════════
+    //  Cleanup
+    // ══════════════════════════════════════════
+
+    private void cleanup() {
         try {
-            android.net.Uri uri = android.net.Uri.parse("content://com.rebron1900.fcitx5enhanced.config");
-            android.database.Cursor c = anyView.getContext()
-                    .getContentResolver().query(uri, null, null, null, null);
-            if (c != null && c.moveToFirst()) {
-                try {
-                    cfg.leftBtn = c.getInt(c.getColumnIndexOrThrow("show_left_button")) != 0;
-                    cfg.rightBtn = c.getInt(c.getColumnIndexOrThrow("show_right_button")) != 0;
-                    cfg.voice = c.getInt(c.getColumnIndexOrThrow("voice_enabled")) != 0;
-                    cfg.keyBorder = c.getInt(c.getColumnIndexOrThrow("key_border")) != 0;
-                    cfg.blur = c.getInt(c.getColumnIndexOrThrow("blur_radius"));
-                    cfg.alpha = c.getInt(c.getColumnIndexOrThrow("bg_alpha"));
-                    cfg.keyAlpha = c.getInt(c.getColumnIndexOrThrow("key_alpha"));
-                    cfg.corner = c.getInt(c.getColumnIndexOrThrow("corner_radius"));
-                    cfg.toolbar = cfg.corner;
-                    Log.i(TAG, "reapply from provider: keyBorder=" + cfg.keyBorder);
-                } finally {
-                    c.close();
+            if (mReceiver != null) {
+                View cv = getCurrentInputView();
+                if (cv != null) {
+                    cv.getContext().unregisterReceiver(mReceiver);
                 }
+                mReceiver = null;
             }
-            View cv = mCurrentInputView;
-            if (cv != null) cv.post(() -> applyAllEffects(cv));
-        } catch (Throwable t) {
-            Log.w(TAG, "reapplyFromProvider failed: " + t);
-        }
+        } catch (Exception ignored) {}
+        try {
+            if (mConfigObserver != null) {
+                View cv = getCurrentInputView();
+                if (cv != null) {
+                    cv.getContext().getContentResolver().unregisterContentObserver(mConfigObserver);
+                }
+                mConfigObserver = null;
+            }
+        } catch (Exception ignored) {}
+        try {
+            if (mThemePrefListener != null) {
+                View cv = getCurrentInputView();
+                if (cv != null) {
+                    SharedPreferences sp = android.preference.PreferenceManager.getDefaultSharedPreferences(cv.getContext());
+                    sp.unregisterOnSharedPreferenceChangeListener(mThemePrefListener);
+                }
+                mThemePrefListener = null;
+            }
+        } catch (Exception ignored) {}
+        receiverRegistered = false;
+        mConfigObserved = false;
+        mCurrentInputViewRef = null;
     }
 
     // ══════════════════════════════════════════
