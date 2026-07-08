@@ -485,6 +485,12 @@ public class SettingsActivity extends Activity {
                 .putBoolean("key_border", swKeyBorder.isChecked())
                 .commit();
 
+        // 2. 统一 SP（ConfigManager — fcitx5 进程读这个）
+        ConfigManager.write(this,
+                sbBlur.getProgress(), sbAlpha.getProgress(), sbKeyAlpha.getProgress(), sbCorner.getProgress(),
+                swVoice.isChecked(), swLeft.isChecked(), swRight.isChecked(), swKeyBorder.isChecked());
+
+        // 3. NPatch 备选：写 JSON 文件
         android.content.Context fcitxCtx = getFcitx5Context();
         if (fcitxCtx != null) {
             ConfigStorage.writeConfigToFile(fcitxCtx,
