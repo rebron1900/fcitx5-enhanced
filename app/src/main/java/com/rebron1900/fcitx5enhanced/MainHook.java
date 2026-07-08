@@ -97,17 +97,15 @@ public class MainHook extends XposedModule {
                 return null;
             });
 
-            // 键盘弹出时检查是否需要应用效果 + 检查定时同步
+            // 键盘弹出时应用效果 + 检查定时同步
+            // 不设版本号跳过：输入法切换可能重建键盘布局（同 InputView），
+            // 各 Helper 内部缓存（bitmap 指纹、View 树哈希）会自动处理无变更时的轻量跳过。
             Method onWindowShown = svc.getMethod("onWindowShown");
             hook(onWindowShown).intercept(chain -> {
                 chain.proceed();
                 View cv = getCurrentInputView();
                 if (cv != null) {
-                    cv.post(() -> {
-                        if (ConfigManager.shouldApply(cv)) {
-                            applyAllEffects(cv);
-                        }
-                    });
+                    cv.post(() -> applyAllEffects(cv));
                     checkAndRunSync(cv.getContext());
                 }
                 return null;
