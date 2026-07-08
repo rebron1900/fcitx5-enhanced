@@ -2,7 +2,6 @@ package com.rebron1900.fcitx5enhanced;
 
 import android.content.ContentProvider;
 import android.content.ContentValues;
-import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.database.MatrixCursor;
 import android.net.Uri;
@@ -11,41 +10,36 @@ import android.util.Log;
 /**
  * 跨进程配置共享 Provider。
  * <p>
- * SettingsActivity（插件进程）写入 → fcitx5 进程通过 ContentObserver 感知变化 → 读取。
+ * SettingsActivity（插件进程）写入 → fcitx5 进程通过 ContentObserver 感知变化。
+ * 存储统一使用 {@link ConfigManager} 的主 SP。
  */
 public class ConfigProvider extends ContentProvider {
 
     private static final String TAG = "Fcitx5Enh";
-    private static final String SP_NAME = "fcitx5_enhanced_config_provider";
 
     @Override
-    public boolean onCreate() {
-        return true;
-    }
+    public boolean onCreate() { return true; }
 
     @Override
     public String getType(Uri uri) {
         return "vnd.android.cursor.dir/vnd.fcitx5enhanced.config";
     }
 
-    /** SettingsActivity 写入配置。 */
     @Override
     public int update(Uri uri, ContentValues values, String selection, String[] selectionArgs) {
         Log.i(TAG, "ConfigProvider.write config");
         try {
-            SharedPreferences sp = getContext()
-                    .getSharedPreferences(SP_NAME, android.content.Context.MODE_PRIVATE);
-            SharedPreferences.Editor ed = sp.edit();
-            writeBool(ed, values, "show_left_button", true);
-            writeBool(ed, values, "show_right_button", true);
-            writeBool(ed, values, "voice_enabled", true);
-            writeBool(ed, values, "key_border", true);
-            writeInt(ed, values, "blur_radius", 100);
-            writeInt(ed, values, "bg_alpha", 60);
-            writeInt(ed, values, "key_alpha", 140);
-            writeInt(ed, values, "corner_radius", 20);
-            ed.commit();
-            // 通知观察者
+            ConfigManager.Config current = ConfigManager.read(getContext());
+            ConfigManager.write(getContext(),
+                    values.containsKey("blur_radius") ? values.getAsInteger("blur_radius") : current.blur,
+                    values.containsKey("bg_alpha") ? values.getAsInteger("bg_alpha") : current.alpha,
+                    values.containsKey("key_alpha") ? values.getAsInteger("key_alpha") : current.keyAlpha,
+                    values.containsKey("corner_radius") ? values.getAsInteger("corner_radius") : current.corner,
+                    values.containsKey("voice_enabled") ? values.getAsBoolean("voice_enabled") : current.voice,
+                    values.containsKey("show_left_button") ? values.getAsBoolean("show_left_button") : current.leftBtn,
+                    values.containsKey("show_right_button") ? values.getAsBoolean("show_right_button") : current.rightBtn,
+                    values.containsKey("key_border") ? values.getAsBoolean("key_border") : current.keyBorder
+            );
             getContext().getContentResolver().notifyChange(uri, null);
             return 1;
         } catch (Exception e) {
@@ -54,42 +48,27 @@ public class ConfigProvider extends ContentProvider {
         }
     }
 
-    /** MainHook 读取配置。返回单行 Cursor。 */
     @Override
     public Cursor query(Uri uri, String[] projection, String selection,
                         String[] selectionArgs, String sortOrder) {
         try {
-            SharedPreferences sp = getContext()
-                    .getSharedPreferences(SP_NAME, android.content.Context.MODE_PRIVATE);
+            ConfigManager.Config cfg = ConfigManager.read(getContext());
             MatrixCursor c = new MatrixCursor(new String[]{
                     "show_left_button", "show_right_button", "voice_enabled",
                     "key_border", "blur_radius", "bg_alpha", "key_alpha", "corner_radius"
             });
             c.addRow(new Object[]{
-                    sp.getBoolean("show_left_button", true),
-                    sp.getBoolean("show_right_button", true),
-                    sp.getBoolean("voice_enabled", true),
-                    sp.getBoolean("key_border", true),
-                    sp.getInt("blur_radius", 100),
-                    sp.getInt("bg_alpha", 60),
-                    sp.getInt("key_alpha", 140),
-                    sp.getInt("corner_radius", 20)
+                    cfg.leftBtn ? 1 : 0,
+                    cfg.rightBtn ? 1 : 0,
+                    cfg.voice ? 1 : 0,
+                    cfg.keyBorder ? 1 : 0,
+                    cfg.blur, cfg.alpha, cfg.keyAlpha, cfg.corner
             });
             return c;
         } catch (Exception e) {
             Log.w(TAG, "ConfigProvider.read failed: " + e);
             return null;
         }
-    }
-
-    // helper
-    private void writeBool(SharedPreferences.Editor ed, ContentValues v, String key, boolean def) {
-        if (v.containsKey(key)) ed.putBoolean(key, v.getAsBoolean(key));
-        else ed.putBoolean(key, def);
-    }
-    private void writeInt(SharedPreferences.Editor ed, ContentValues v, String key, int def) {
-        if (v.containsKey(key)) ed.putInt(key, v.getAsInteger(key));
-        else ed.putInt(key, def);
     }
 
     @Override public Uri insert(Uri uri, ContentValues values) { return null; }
