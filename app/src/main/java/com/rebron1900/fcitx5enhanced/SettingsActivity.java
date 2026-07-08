@@ -448,7 +448,7 @@ public class SettingsActivity extends Activity {
         } else {
             android.content.Context fcitxCtx = getFcitx5Context();
             if (fcitxCtx != null && ConfigStorage.configFileExists(fcitxCtx)) {
-                MainHook.Config cfg = ConfigStorage.readConfigFromFile(fcitxCtx);
+                ConfigManager.Config cfg = ConfigStorage.readConfigFromFile(fcitxCtx);
                 sbBlur.setProgress(cfg.blur);
                 sbAlpha.setProgress(cfg.alpha);
                 sbKeyAlpha.setProgress(cfg.keyAlpha);

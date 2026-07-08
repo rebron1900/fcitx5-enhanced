@@ -148,8 +148,17 @@ public class MainHook extends XposedModule {
         try {
             // 1. 文件优先（NPatch 兼容）
             if (ConfigStorage.configFileExists(anyView.getContext())) {
-                Config fileCfg = ConfigStorage.readConfigFromFile(anyView.getContext());
-                config = fileCfg;
+                ConfigManager.Config fileCfg = ConfigStorage.readConfigFromFile(anyView.getContext());
+                config = new Config();
+                config.blur = fileCfg.blur;
+                config.alpha = fileCfg.alpha;
+                config.keyAlpha = fileCfg.keyAlpha;
+                config.corner = fileCfg.corner;
+                config.toolbar = fileCfg.toolbar;
+                config.voice = fileCfg.voice;
+                config.leftBtn = fileCfg.leftBtn;
+                config.rightBtn = fileCfg.rightBtn;
+                config.keyBorder = fileCfg.keyBorder;
                 Log.i(TAG, "readConfigSync from file: L=" + config.leftBtn + " R=" + config.rightBtn);
                 return config;
             }
@@ -177,8 +186,17 @@ public class MainHook extends XposedModule {
         try {
             // 1. 文件优先（NPatch 兼容）
             if (ConfigStorage.configFileExists(anyView.getContext())) {
-                Config fileCfg = ConfigStorage.readConfigFromFile(anyView.getContext());
-                cfg = fileCfg;
+                ConfigManager.Config fileCfg = ConfigStorage.readConfigFromFile(anyView.getContext());
+                cfg = new Config();
+                cfg.blur = fileCfg.blur;
+                cfg.alpha = fileCfg.alpha;
+                cfg.keyAlpha = fileCfg.keyAlpha;
+                cfg.corner = fileCfg.corner;
+                cfg.toolbar = fileCfg.toolbar;
+                cfg.voice = fileCfg.voice;
+                cfg.leftBtn = fileCfg.leftBtn;
+                cfg.rightBtn = fileCfg.rightBtn;
+                cfg.keyBorder = fileCfg.keyBorder;
                 Log.i(TAG, "read from file: L=" + cfg.leftBtn + " R=" + cfg.rightBtn);
                 return;
             }
