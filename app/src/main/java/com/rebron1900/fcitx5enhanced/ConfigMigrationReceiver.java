@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.os.UserManager;
 import android.util.Log;
 
 /** 用户解锁后将 Direct Boot 旧配置迁回 LSPosed 远程偏好使用的凭据保护存储。 */
@@ -18,37 +19,48 @@ public class ConfigMigrationReceiver extends BroadcastReceiver {
                 && !Intent.ACTION_USER_UNLOCKED.equals(action)
                 && !Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) return;
 
+        // BOOT_COMPLETED 通常晚于解锁；USER_UNLOCKED 负责锁屏启动后的闭环；
+        // MY_PACKAGE_REPLACED 若发生在锁屏阶段则等待后续 USER_UNLOCKED。
+        UserManager userManager = context.getSystemService(UserManager.class);
+        if (userManager == null || !userManager.isUserUnlocked()) return;
+
         SharedPreferences target = context.getSharedPreferences(
                 ConfigContract.PREFS_NAME, Context.MODE_PRIVATE);
-        if (isInitialized(target)) return;
         SharedPreferences source = context.createDeviceProtectedStorageContext()
                 .getSharedPreferences(ConfigContract.PREFS_NAME, Context.MODE_PRIVATE);
-        if (!isInitialized(source)) return;
-
-        boolean migrated = target.edit()
-                .putLong(ConfigContract.REVISION,
-                        source.getLong(ConfigContract.REVISION, ConfigContract.DEFAULT_REVISION))
-                .putInt(ConfigContract.BLUR_RADIUS,
-                        source.getInt(ConfigContract.BLUR_RADIUS, ConfigContract.DEFAULT_BLUR))
-                .putInt(ConfigContract.BG_ALPHA,
-                        source.getInt(ConfigContract.BG_ALPHA, ConfigContract.DEFAULT_ALPHA))
-                .putInt(ConfigContract.KEY_ALPHA,
-                        source.getInt(ConfigContract.KEY_ALPHA, ConfigContract.DEFAULT_KEY_ALPHA))
-                .putInt(ConfigContract.CORNER_RADIUS,
-                        source.getInt(ConfigContract.CORNER_RADIUS, ConfigContract.DEFAULT_CORNER))
-                .putBoolean(ConfigContract.VOICE_ENABLED,
-                        source.getBoolean(ConfigContract.VOICE_ENABLED, ConfigContract.DEFAULT_VOICE))
-                .putBoolean(ConfigContract.SHOW_LEFT_BUTTON,
-                        source.getBoolean(ConfigContract.SHOW_LEFT_BUTTON,
-                                ConfigContract.DEFAULT_LEFT_BUTTON))
-                .putBoolean(ConfigContract.SHOW_RIGHT_BUTTON,
-                        source.getBoolean(ConfigContract.SHOW_RIGHT_BUTTON,
-                                ConfigContract.DEFAULT_RIGHT_BUTTON))
-                .putBoolean(ConfigContract.KEY_BORDER,
-                        source.getBoolean(ConfigContract.KEY_BORDER,
-                                ConfigContract.DEFAULT_KEY_BORDER))
-                .commit();
+        boolean migrated = false;
+        if (!isInitialized(target) && isInitialized(source)) {
+            migrated = target.edit()
+                    .putLong(ConfigContract.REVISION,
+                            source.getLong(ConfigContract.REVISION, ConfigContract.DEFAULT_REVISION))
+                    .putInt(ConfigContract.BLUR_RADIUS,
+                            source.getInt(ConfigContract.BLUR_RADIUS, ConfigContract.DEFAULT_BLUR))
+                    .putInt(ConfigContract.BG_ALPHA,
+                            source.getInt(ConfigContract.BG_ALPHA, ConfigContract.DEFAULT_ALPHA))
+                    .putInt(ConfigContract.KEY_ALPHA,
+                            source.getInt(ConfigContract.KEY_ALPHA, ConfigContract.DEFAULT_KEY_ALPHA))
+                    .putInt(ConfigContract.CORNER_RADIUS,
+                            source.getInt(ConfigContract.CORNER_RADIUS, ConfigContract.DEFAULT_CORNER))
+                    .putBoolean(ConfigContract.VOICE_ENABLED,
+                            source.getBoolean(ConfigContract.VOICE_ENABLED, ConfigContract.DEFAULT_VOICE))
+                    .putBoolean(ConfigContract.SHOW_LEFT_BUTTON,
+                            source.getBoolean(ConfigContract.SHOW_LEFT_BUTTON,
+                                    ConfigContract.DEFAULT_LEFT_BUTTON))
+                    .putBoolean(ConfigContract.SHOW_RIGHT_BUTTON,
+                            source.getBoolean(ConfigContract.SHOW_RIGHT_BUTTON,
+                                    ConfigContract.DEFAULT_RIGHT_BUTTON))
+                    .putBoolean(ConfigContract.KEY_BORDER,
+                            source.getBoolean(ConfigContract.KEY_BORDER,
+                                    ConfigContract.DEFAULT_KEY_BORDER))
+                    .commit();
+        }
         if (migrated) Log.i(TAG, "migrated device protected config");
+        // 无论是否需要迁移，都唤醒锁屏阶段已启动的输入法重新拉取凭据配置。
+        try {
+            context.getContentResolver().notifyChange(ConfigContract.CONTENT_URI, null);
+        } catch (Throwable t) {
+            Log.w(TAG, "post-migration config notify failed", t);
+        }
     }
 
     private static boolean isInitialized(SharedPreferences preferences) {
