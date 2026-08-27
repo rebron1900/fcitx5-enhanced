@@ -58,18 +58,24 @@ public class ConfigRequestReceiver extends BroadcastReceiver {
 
     /** API 35+ 使用系统记录的广播发送者；旧系统使用不可伪造的 PendingIntent creator。 */
     private boolean isAllowedCaller(Context context, Intent intent) {
-        if (android.os.Build.VERSION.SDK_INT >= 35) {
-            return uidHasAllowedPackage(context, getSentFromUid());
-        }
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= 35) {
+                return uidHasAllowedPackage(context, getSentFromUid());
+            }
 
-        PendingIntent identity;
-        if (android.os.Build.VERSION.SDK_INT >= 33) {
-            identity = intent.getParcelableExtra(EXTRA_CALLER_IDENTITY, PendingIntent.class);
-        } else {
-            identity = intent.getParcelableExtra(EXTRA_CALLER_IDENTITY);
+            PendingIntent identity;
+            if (android.os.Build.VERSION.SDK_INT >= 33) {
+                identity = intent.getParcelableExtra(EXTRA_CALLER_IDENTITY, PendingIntent.class);
+            } else {
+                identity = intent.getParcelableExtra(EXTRA_CALLER_IDENTITY);
+            }
+            return identity != null && isAllowedIdentity(
+                    context, identity.getCreatorUid(), identity.getCreatorPackage());
+        } catch (Throwable t) {
+            // 恶意调用方可能传入错误类型的 extra，拒绝而非崩溃（接收器 exported）。
+            Log.w(TAG, "config caller identity check failed, rejected: " + t.getMessage());
+            return false;
         }
-        return identity != null && isAllowedIdentity(
-                context, identity.getCreatorUid(), identity.getCreatorPackage());
     }
 
     private static boolean isAllowedIdentity(Context context, int uid, String packageName) {

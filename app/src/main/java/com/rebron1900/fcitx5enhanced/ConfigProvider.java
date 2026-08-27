@@ -221,29 +221,9 @@ public class ConfigProvider extends ContentProvider {
     }
 
     private static boolean copyConfig(SharedPreferences source, SharedPreferences target) {
-        return target.edit()
-                .putLong(ConfigContract.REVISION,
-                        source.getLong(ConfigContract.REVISION, ConfigContract.DEFAULT_REVISION))
-                .putInt(ConfigContract.BLUR_RADIUS,
-                        source.getInt(ConfigContract.BLUR_RADIUS, ConfigContract.DEFAULT_BLUR))
-                .putInt(ConfigContract.BG_ALPHA,
-                        source.getInt(ConfigContract.BG_ALPHA, ConfigContract.DEFAULT_ALPHA))
-                .putInt(ConfigContract.KEY_ALPHA,
-                        source.getInt(ConfigContract.KEY_ALPHA, ConfigContract.DEFAULT_KEY_ALPHA))
-                .putInt(ConfigContract.CORNER_RADIUS,
-                        source.getInt(ConfigContract.CORNER_RADIUS, ConfigContract.DEFAULT_CORNER))
-                .putBoolean(ConfigContract.VOICE_ENABLED,
-                        source.getBoolean(ConfigContract.VOICE_ENABLED, ConfigContract.DEFAULT_VOICE))
-                .putBoolean(ConfigContract.SHOW_LEFT_BUTTON,
-                        source.getBoolean(ConfigContract.SHOW_LEFT_BUTTON,
-                                ConfigContract.DEFAULT_LEFT_BUTTON))
-                .putBoolean(ConfigContract.SHOW_RIGHT_BUTTON,
-                        source.getBoolean(ConfigContract.SHOW_RIGHT_BUTTON,
-                                ConfigContract.DEFAULT_RIGHT_BUTTON))
-                .putBoolean(ConfigContract.KEY_BORDER,
-                        source.getBoolean(ConfigContract.KEY_BORDER,
-                                ConfigContract.DEFAULT_KEY_BORDER))
-                .commit();
+        SharedPreferences.Editor editor = target.edit();
+        ConfigContract.copyToEditor(source, editor);
+        return editor.commit();
     }
 
     private void requireValidUri(Uri uri) {

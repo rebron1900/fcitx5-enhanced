@@ -1,6 +1,7 @@
 package com.rebron1900.fcitx5enhanced;
 
 import android.content.ContentValues;
+import android.content.SharedPreferences;
 import android.database.Cursor;
 import android.net.Uri;
 
@@ -97,6 +98,19 @@ public final class ConfigContract {
     /** 递增 revision，避免 Long.MAX_VALUE 溢出为负数。 */
     public static long nextRevision(long revision) {
         return revision == Long.MAX_VALUE ? 1L : revision + 1L;
+    }
+
+    /** 将源 SP 的全部配置字段复制进 editor（Direct Boot 迁移共用，避免三处重复搬运）。 */
+    public static void copyToEditor(SharedPreferences source, SharedPreferences.Editor editor) {
+        editor.putLong(REVISION, source.getLong(REVISION, DEFAULT_REVISION));
+        editor.putInt(BLUR_RADIUS, source.getInt(BLUR_RADIUS, DEFAULT_BLUR));
+        editor.putInt(BG_ALPHA, source.getInt(BG_ALPHA, DEFAULT_ALPHA));
+        editor.putInt(KEY_ALPHA, source.getInt(KEY_ALPHA, DEFAULT_KEY_ALPHA));
+        editor.putInt(CORNER_RADIUS, source.getInt(CORNER_RADIUS, DEFAULT_CORNER));
+        editor.putBoolean(VOICE_ENABLED, source.getBoolean(VOICE_ENABLED, DEFAULT_VOICE));
+        editor.putBoolean(SHOW_LEFT_BUTTON, source.getBoolean(SHOW_LEFT_BUTTON, DEFAULT_LEFT_BUTTON));
+        editor.putBoolean(SHOW_RIGHT_BUTTON, source.getBoolean(SHOW_RIGHT_BUTTON, DEFAULT_RIGHT_BUTTON));
+        editor.putBoolean(KEY_BORDER, source.getBoolean(KEY_BORDER, DEFAULT_KEY_BORDER));
     }
 
     private static int clamp(int value, int min, int max) {
