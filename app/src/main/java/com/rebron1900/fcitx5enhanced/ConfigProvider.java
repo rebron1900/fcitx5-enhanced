@@ -30,7 +30,34 @@ public class ConfigProvider extends ContentProvider {
 
     @Override
     public boolean onCreate() {
-        return getContext() != null;
+        if (getContext() == null) return false;
+        if (android.os.Build.VERSION.SDK_INT >= 24) {
+            try {
+                android.content.BroadcastReceiver receiver = new android.content.BroadcastReceiver() {
+                    @Override
+                    public void onReceive(android.content.Context context,
+                                          android.content.Intent intent) {
+                        if (!android.content.Intent.ACTION_USER_UNLOCKED.equals(intent.getAction())) return;
+                        synchronized (ConfigProvider.this) {
+                            migrateCredentialProtectedPreferences();
+                            migrateLegacyActivityPreferences();
+                        }
+                        context.getContentResolver().notifyChange(ConfigContract.CONTENT_URI, null);
+                    }
+                };
+                android.content.IntentFilter filter = new android.content.IntentFilter(
+                        android.content.Intent.ACTION_USER_UNLOCKED);
+                if (android.os.Build.VERSION.SDK_INT >= 33) {
+                    getContext().registerReceiver(receiver, filter,
+                            android.content.Context.RECEIVER_NOT_EXPORTED);
+                } else {
+                    getContext().registerReceiver(receiver, filter);
+                }
+            } catch (Throwable t) {
+                Log.w(TAG, "user unlock receiver registration failed", t);
+            }
+        }
+        return true;
     }
 
     @Override
@@ -107,6 +134,7 @@ public class ConfigProvider extends ContentProvider {
     }
 
     private SharedPreferences preferences() {
+        migrateCredentialProtectedPreferences();
         migrateLegacyActivityPreferences();
         return rawPreferences();
     }
@@ -116,11 +144,32 @@ public class ConfigProvider extends ContentProvider {
                 ConfigContract.PREFS_NAME, android.content.Context.MODE_PRIVATE);
     }
 
+    /** 将 Direct Boot 旧配置迁回 LSPosed 远程偏好使用的凭据保护存储。 */
+    private synchronized void migrateCredentialProtectedPreferences() {
+        if (android.os.Build.VERSION.SDK_INT < 24
+                || !((android.os.UserManager) getContext().getSystemService(
+                        android.content.Context.USER_SERVICE)).isUserUnlocked()) return;
+
+        SharedPreferences target = rawPreferences();
+        if (isInitialized(target)) return;
+        SharedPreferences source = getContext().createDeviceProtectedStorageContext()
+                .getSharedPreferences(ConfigContract.PREFS_NAME,
+                        android.content.Context.MODE_PRIVATE);
+        if (!isInitialized(source)) return;
+
+        if (copyConfig(source, target)) {
+            Log.i(TAG, "migrated device protected config");
+        }
+    }
+
     /**
      * 旧版设置页使用 Activity.getPreferences()；Provider 首次访问时就迁移，
      * 避免用户升级后必须先打开设置页才能恢复已有配置。
      */
     private synchronized void migrateLegacyActivityPreferences() {
+        if (android.os.Build.VERSION.SDK_INT >= 24
+                && !((android.os.UserManager) getContext().getSystemService(
+                        android.content.Context.USER_SERVICE)).isUserUnlocked()) return;
         SharedPreferences target = rawPreferences();
         // revision 也作为统一配置已初始化标记；设置页 fallback 可能只写了增量字段。
         if (target.contains(ConfigContract.BLUR_RADIUS)
@@ -164,6 +213,37 @@ public class ConfigProvider extends ContentProvider {
             if (migrated) Log.i(TAG, "migrated legacy activity preferences");
             return;
         }
+    }
+
+    private static boolean isInitialized(SharedPreferences preferences) {
+        return preferences.contains(ConfigContract.BLUR_RADIUS)
+                || preferences.contains(ConfigContract.REVISION);
+    }
+
+    private static boolean copyConfig(SharedPreferences source, SharedPreferences target) {
+        return target.edit()
+                .putLong(ConfigContract.REVISION,
+                        source.getLong(ConfigContract.REVISION, ConfigContract.DEFAULT_REVISION))
+                .putInt(ConfigContract.BLUR_RADIUS,
+                        source.getInt(ConfigContract.BLUR_RADIUS, ConfigContract.DEFAULT_BLUR))
+                .putInt(ConfigContract.BG_ALPHA,
+                        source.getInt(ConfigContract.BG_ALPHA, ConfigContract.DEFAULT_ALPHA))
+                .putInt(ConfigContract.KEY_ALPHA,
+                        source.getInt(ConfigContract.KEY_ALPHA, ConfigContract.DEFAULT_KEY_ALPHA))
+                .putInt(ConfigContract.CORNER_RADIUS,
+                        source.getInt(ConfigContract.CORNER_RADIUS, ConfigContract.DEFAULT_CORNER))
+                .putBoolean(ConfigContract.VOICE_ENABLED,
+                        source.getBoolean(ConfigContract.VOICE_ENABLED, ConfigContract.DEFAULT_VOICE))
+                .putBoolean(ConfigContract.SHOW_LEFT_BUTTON,
+                        source.getBoolean(ConfigContract.SHOW_LEFT_BUTTON,
+                                ConfigContract.DEFAULT_LEFT_BUTTON))
+                .putBoolean(ConfigContract.SHOW_RIGHT_BUTTON,
+                        source.getBoolean(ConfigContract.SHOW_RIGHT_BUTTON,
+                                ConfigContract.DEFAULT_RIGHT_BUTTON))
+                .putBoolean(ConfigContract.KEY_BORDER,
+                        source.getBoolean(ConfigContract.KEY_BORDER,
+                                ConfigContract.DEFAULT_KEY_BORDER))
+                .commit();
     }
 
     private void requireValidUri(Uri uri) {

@@ -11,6 +11,7 @@ import android.net.Uri;
  * {@link ConfigProvider} 查询和观察这份配置，避免跨 UID 直接读写文件。
  */
 public final class ConfigContract {
+    public static final String MODULE_PACKAGE = "com.rebron1900.fcitx5enhanced";
     public static final String AUTHORITY = "com.rebron1900.fcitx5enhanced.config";
     public static final Uri CONTENT_URI = Uri.parse("content://" + AUTHORITY + "/config");
     public static final String PREFS_NAME = "fcitx5_enhanced_config";

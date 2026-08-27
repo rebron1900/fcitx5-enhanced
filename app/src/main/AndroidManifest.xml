@@ -2,6 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- 满足 AudioRecord 静态权限契约；实际运行时仍检查目标输入法 UID 的授权。 -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
         android:icon="@drawable/ic_launcher"
@@ -38,6 +39,21 @@
             android:name=".ConfigProvider"
             android:authorities="com.rebron1900.fcitx5enhanced.config"
             android:exported="true" />
+
+        <receiver
+            android:name=".ConfigRequestReceiver"
+            android:exported="true" />
+
+        <receiver
+            android:name=".ConfigMigrationReceiver"
+            android:directBootAware="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.USER_UNLOCKED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
     </application>
 </manifest>
