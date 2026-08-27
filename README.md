@@ -97,6 +97,13 @@ cd fcitx5-enhanced
 
 ## 更新日志
 
+### v1.9.3
+- 修复 Issue #5：重启/冷启动后首次拉起键盘即应用已保存配置，无需先打开设置页
+- 配置读取改用显式有序广播，绕过 Android 包可见性限制；解锁后迁移受设备保护（Direct Boot）配置
+- 新增 `USER_UNLOCKED` 后自动重新拉取配置，锁屏阶段拉起键盘也能在解锁后恢复效果
+- 加固配置广播接收器调用方身份校验，限制仅输入法进程可读，防御任意应用窃取配置
+- 感谢 [@Lyrecoul](https://github.com/Lyrecoul) 提交 PR [#6](https://github.com/rebron1900/fcitx5-enhanced/pull/6)
+
 ### v1.9.2
 - 修复 Issue #4：降低配置变化和布局变化带来的 CPU 占用
 - 修复配置跨进程同步偶发延迟或丢失
