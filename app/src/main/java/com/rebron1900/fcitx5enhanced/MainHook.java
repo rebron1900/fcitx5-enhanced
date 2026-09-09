@@ -43,6 +43,7 @@ public class MainHook extends XposedModule {
         public int alpha = 60;
         public int keyAlpha = 140;  // 按键背景透明度（独立于键盘背景）
         public int corner = 20;
+        public int buttonBottomMargin = 26;
         public int toolbar = 20;
         public boolean voice = true;
         public boolean leftBtn = true;
@@ -55,7 +56,7 @@ public class MainHook extends XposedModule {
         public boolean equals(Config o) {
             return o != null
                 && blur == o.blur && alpha == o.alpha && keyAlpha == o.keyAlpha
-                && corner == o.corner && keyBorder == o.keyBorder
+                && corner == o.corner && buttonBottomMargin == o.buttonBottomMargin && keyBorder == o.keyBorder
                 && leftBtn == o.leftBtn && rightBtn == o.rightBtn && voice == o.voice;
         }
     }
@@ -291,6 +292,7 @@ public class MainHook extends XposedModule {
         config.alpha = values.getInt(ConfigContract.BG_ALPHA, ConfigContract.DEFAULT_ALPHA);
         config.keyAlpha = values.getInt(ConfigContract.KEY_ALPHA, ConfigContract.DEFAULT_KEY_ALPHA);
         config.corner = values.getInt(ConfigContract.CORNER_RADIUS, ConfigContract.DEFAULT_CORNER);
+        config.buttonBottomMargin = values.getInt(ConfigContract.BUTTON_BOTTOM_MARGIN, ConfigContract.DEFAULT_BUTTON_BOTTOM_MARGIN);
         config.voice = values.getBoolean(ConfigContract.VOICE_ENABLED, ConfigContract.DEFAULT_VOICE);
         config.leftBtn = values.getBoolean(
                 ConfigContract.SHOW_LEFT_BUTTON, ConfigContract.DEFAULT_LEFT_BUTTON);
@@ -341,6 +343,7 @@ public class MainHook extends XposedModule {
             config.alpha = sp.getInt(ConfigContract.BG_ALPHA, ConfigContract.DEFAULT_ALPHA);
             config.keyAlpha = sp.getInt(ConfigContract.KEY_ALPHA, ConfigContract.DEFAULT_KEY_ALPHA);
             config.corner = sp.getInt(ConfigContract.CORNER_RADIUS, ConfigContract.DEFAULT_CORNER);
+            config.buttonBottomMargin = sp.getInt(ConfigContract.BUTTON_BOTTOM_MARGIN, ConfigContract.DEFAULT_BUTTON_BOTTOM_MARGIN);
             config.toolbar = config.corner;
             config.voice = sp.getBoolean(ConfigContract.VOICE_ENABLED, ConfigContract.DEFAULT_VOICE);
             config.leftBtn = sp.getBoolean(ConfigContract.SHOW_LEFT_BUTTON, ConfigContract.DEFAULT_LEFT_BUTTON);

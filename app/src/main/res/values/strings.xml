@@ -28,6 +28,11 @@
     <string name="settings_corner_value_format">%1$ddp</string>
     <string name="settings_corner_accessibility">键盘圆角，范围 0 到 48dp</string>
     <string name="settings_corner_default">20dp</string>
+    <string name="settings_button_bottom_margin_label">图表离键盘底部距离</string>
+    <string name="settings_button_bottom_margin_desc">范围：0–100dp。控制左右自定义图表与键盘底部的距离。</string>
+    <string name="settings_button_bottom_margin_value_format">%1$ddp</string>
+    <string name="settings_button_bottom_margin_accessibility">图表离键盘底部距离，范围 0 到 100dp</string>
+    <string name="settings_button_bottom_margin_default">26dp</string>
 
     <string name="settings_voice_label">启用语音输入</string>
     <string name="settings_voice_desc">启用工具栏中的语音输入按钮。</string>

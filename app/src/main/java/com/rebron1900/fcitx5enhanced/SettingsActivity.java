@@ -15,8 +15,8 @@ public class SettingsActivity extends Activity {
     private static final String TAG = "Fcitx5Enh";
 
     // Theme tab
-    private SeekBar sbBlur, sbAlpha, sbKeyAlpha, sbCorner;
-    private TextView tvBlur, tvAlpha, tvKeyAlpha, tvCorner;
+    private SeekBar sbBlur, sbAlpha, sbKeyAlpha, sbCorner, sbButtonBottomMargin;
+    private TextView tvBlur, tvAlpha, tvKeyAlpha, tvCorner, tvButtonBottomMargin;
     private Switch swVoice, swLeft, swRight, swKeyBorder;
     /** 最近一次已提交的界面快照；只提交实际变化字段，避免旧 Activity 覆盖并发修改。 */
     private MainHook.Config mSavedConfig;
@@ -31,6 +31,8 @@ public class SettingsActivity extends Activity {
         sbAlpha = findViewById(R.id.sb_bg_alpha);
         sbKeyAlpha = findViewById(R.id.sb_key_alpha);
         sbCorner = findViewById(R.id.sb_corner_radius);
+        sbButtonBottomMargin = findViewById(R.id.sb_button_bottom_margin);
+        tvButtonBottomMargin = findViewById(R.id.tv_button_bottom_margin_val);
         tvBlur = findViewById(R.id.tv_blur_val);
         tvAlpha = findViewById(R.id.tv_alpha_val);
         tvKeyAlpha = findViewById(R.id.tv_key_alpha_val);
@@ -53,6 +55,7 @@ public class SettingsActivity extends Activity {
         sbAlpha.setOnSeekBarChangeListener(listener);
         sbKeyAlpha.setOnSeekBarChangeListener(listener);
         sbCorner.setOnSeekBarChangeListener(listener);
+        sbButtonBottomMargin.setOnSeekBarChangeListener(listener);
 
         View.OnClickListener switchListener = v -> saveAndApply();
         swVoice.setOnClickListener(switchListener);
@@ -85,6 +88,8 @@ public class SettingsActivity extends Activity {
                 ConfigContract.DEFAULT_KEY_ALPHA), 0, 255));
         sbCorner.setProgress(clamp(sp.getInt(ConfigContract.CORNER_RADIUS,
                 ConfigContract.DEFAULT_CORNER), 0, 48));
+        sbButtonBottomMargin.setProgress(clamp(sp.getInt(ConfigContract.BUTTON_BOTTOM_MARGIN,
+                ConfigContract.DEFAULT_BUTTON_BOTTOM_MARGIN), 0, 100));
         swVoice.setChecked(sp.getBoolean(ConfigContract.VOICE_ENABLED, ConfigContract.DEFAULT_VOICE));
         swLeft.setChecked(sp.getBoolean(ConfigContract.SHOW_LEFT_BUTTON, ConfigContract.DEFAULT_LEFT_BUTTON));
         swRight.setChecked(sp.getBoolean(ConfigContract.SHOW_RIGHT_BUTTON, ConfigContract.DEFAULT_RIGHT_BUTTON));
@@ -123,6 +128,8 @@ public class SettingsActivity extends Activity {
         tvKeyAlpha.setText(getString(R.string.settings_opacity_value_format,
                 toPercent(sbKeyAlpha.getProgress())));
         tvCorner.setText(getString(R.string.settings_corner_value_format, sbCorner.getProgress()));
+        tvButtonBottomMargin.setText(getString(R.string.settings_button_bottom_margin_value_format,
+                sbButtonBottomMargin.getProgress()));
     }
 
     /** 内部透明度使用 0–255；界面统一显示四舍五入后的 0–100%。 */
@@ -160,6 +167,7 @@ public class SettingsActivity extends Activity {
         config.alpha = sbAlpha.getProgress();
         config.keyAlpha = sbKeyAlpha.getProgress();
         config.corner = sbCorner.getProgress();
+        config.buttonBottomMargin = sbButtonBottomMargin.getProgress();
         config.toolbar = config.corner;
         config.voice = swVoice.isChecked();
         config.leftBtn = swLeft.isChecked();
@@ -178,10 +186,12 @@ public class SettingsActivity extends Activity {
         Object alpha = values.get(ConfigContract.BG_ALPHA);
         Object keyAlpha = values.get(ConfigContract.KEY_ALPHA);
         Object corner = values.get(ConfigContract.CORNER_RADIUS);
+        Object buttonBottomMargin = values.get(ConfigContract.BUTTON_BOTTOM_MARGIN);
         if (blur instanceof Integer) editor.putInt(ConfigContract.BLUR_RADIUS, (Integer) blur);
         if (alpha instanceof Integer) editor.putInt(ConfigContract.BG_ALPHA, (Integer) alpha);
         if (keyAlpha instanceof Integer) editor.putInt(ConfigContract.KEY_ALPHA, (Integer) keyAlpha);
         if (corner instanceof Integer) editor.putInt(ConfigContract.CORNER_RADIUS, (Integer) corner);
+        if (buttonBottomMargin instanceof Integer) editor.putInt(ConfigContract.BUTTON_BOTTOM_MARGIN, (Integer) buttonBottomMargin);
         if (values.containsKey(ConfigContract.VOICE_ENABLED)) {
             editor.putBoolean(ConfigContract.VOICE_ENABLED, values.getAsBoolean(ConfigContract.VOICE_ENABLED));
         }

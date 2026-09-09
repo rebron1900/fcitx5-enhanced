@@ -53,6 +53,7 @@ public class ExtraButtonsHelper {
                 if (!allGone && !needIme && !needClip && !needWave) {
                     // 按钮齐全：同步可见性和主题颜色，避免主题切换后图标保持旧颜色。
                     updateExistingButtonAppearance(inputView, ime, clip, wave, ti);
+                    updateExistingButtonPositions(inputView, ime, clip, wave, c);
                     if (ime != null) ime.setVisibility(c.leftBtn ? View.VISIBLE : View.GONE);
                     if (clip != null) clip.setVisibility(c.rightBtn ? View.VISIBLE : View.GONE);
                     if (wave != null) {
@@ -77,7 +78,8 @@ public class ExtraButtonsHelper {
             Context ctx = inputView.getContext();
             final float den = res.getDisplayMetrics().density;
             final int bs = (int) (30 * den + .5f);
-            final int mr = (int) (26 * den + .5f);
+            final int sideMargin = Math.round(26 * den);
+            final int bottomMargin = Math.round(c.buttonBottomMargin * den);
 
             int keyFg = ti.altKeyTextColor != 0 ? ti.altKeyTextColor : 0xFF888888;
             int accentBg = ti.accentColor != 0 ? ti.accentColor : 0xFF07C160;
@@ -104,8 +106,8 @@ public class ExtraButtonsHelper {
                 ime.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
                     v.getLayoutParams().width = bs;
                     v.getLayoutParams().height = bs;
-                    v.setX(mr);
-                    v.setY(keyboardView.getHeight() - bs - mr - topExtra);
+                    v.setX(sideMargin);
+                    v.setY(keyboardView.getHeight() - bs - bottomMargin - topExtra);
                 });
             }
 
@@ -127,8 +129,8 @@ public class ExtraButtonsHelper {
                 clip.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
                     v.getLayoutParams().width = bs;
                     v.getLayoutParams().height = bs;
-                    v.setX(keyboardView.getWidth() - bs - mr);
-                    v.setY(keyboardView.getHeight() - bs - mr - topExtra);
+                    v.setX(keyboardView.getWidth() - bs - sideMargin);
+                    v.setY(keyboardView.getHeight() - bs - bottomMargin - topExtra);
                 });
             }
 
@@ -228,7 +230,7 @@ public class ExtraButtonsHelper {
                         (int) (160 * den + .5f), bs));
                 waveView.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
                     v.setX((keyboardView.getWidth() - v.getWidth()) / 2);
-                    v.setY(keyboardView.getHeight() - bs - mr - topExtra);
+                    v.setY(keyboardView.getHeight() - bs - bottomMargin - topExtra);
                 });
                 waveView.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
                     @Override public void onViewAttachedToWindow(View v) {}
@@ -261,6 +263,19 @@ public class ExtraButtonsHelper {
             waveform.setRecording(false);
             waveform.setAmplitude(0);
         }
+    }
+
+    private static void updateExistingButtonPositions(View inputView, View ime, View clip, View wave, MainHook.Config c) {
+        View anchor = ime != null ? ime : (clip != null ? clip : wave);
+        if (anchor == null || !(anchor.getParent() instanceof ViewGroup)) return;
+        ViewGroup keyboardView = (ViewGroup) anchor.getParent();
+        float den = inputView.getResources().getDisplayMetrics().density;
+        int bs = Math.round(30 * den);
+        int sideMargin = Math.round(26 * den);
+        int bottomMargin = Math.round(c.buttonBottomMargin * den);
+        if (ime != null) { ime.setX(sideMargin); ime.setY(keyboardView.getHeight() - bs - bottomMargin + Math.round(10 * den)); }
+        if (clip != null) { clip.setX(keyboardView.getWidth() - bs - sideMargin); clip.setY(keyboardView.getHeight() - bs - bottomMargin + Math.round(10 * den)); }
+        if (wave != null) { wave.setX((keyboardView.getWidth() - wave.getWidth()) / 2f); wave.setY(keyboardView.getHeight() - bs - bottomMargin + Math.round(10 * den)); }
     }
 
     private static void updateExistingButtonAppearance(View inputView, View ime,

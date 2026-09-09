@@ -28,11 +28,13 @@ public final class ConfigContract {
     public static final String BG_ALPHA = "bg_alpha";
     public static final String KEY_ALPHA = "key_alpha";
     public static final String CORNER_RADIUS = "corner_radius";
+    public static final String BUTTON_BOTTOM_MARGIN = "button_bottom_margin";
 
     public static final int DEFAULT_BLUR = 100;
     public static final int DEFAULT_ALPHA = 60;
     public static final int DEFAULT_KEY_ALPHA = 140;
     public static final int DEFAULT_CORNER = 20;
+    public static final int DEFAULT_BUTTON_BOTTOM_MARGIN = 26;
     public static final boolean DEFAULT_VOICE = true;
     public static final boolean DEFAULT_LEFT_BUTTON = true;
     public static final boolean DEFAULT_RIGHT_BUTTON = true;
@@ -46,6 +48,7 @@ public final class ConfigContract {
         values.put(BG_ALPHA, config.alpha);
         values.put(KEY_ALPHA, config.keyAlpha);
         values.put(CORNER_RADIUS, config.corner);
+        values.put(BUTTON_BOTTOM_MARGIN, config.buttonBottomMargin);
         values.put(VOICE_ENABLED, config.voice);
         values.put(SHOW_LEFT_BUTTON, config.leftBtn);
         values.put(SHOW_RIGHT_BUTTON, config.rightBtn);
@@ -61,6 +64,7 @@ public final class ConfigContract {
         if (current.alpha != previous.alpha) values.put(BG_ALPHA, current.alpha);
         if (current.keyAlpha != previous.keyAlpha) values.put(KEY_ALPHA, current.keyAlpha);
         if (current.corner != previous.corner) values.put(CORNER_RADIUS, current.corner);
+        if (current.buttonBottomMargin != previous.buttonBottomMargin) values.put(BUTTON_BOTTOM_MARGIN, current.buttonBottomMargin);
         if (current.voice != previous.voice) values.put(VOICE_ENABLED, current.voice);
         if (current.leftBtn != previous.leftBtn) values.put(SHOW_LEFT_BUTTON, current.leftBtn);
         if (current.rightBtn != previous.rightBtn) values.put(SHOW_RIGHT_BUTTON, current.rightBtn);
@@ -82,6 +86,7 @@ public final class ConfigContract {
         config.alpha = cursor.getInt(cursor.getColumnIndexOrThrow(BG_ALPHA));
         config.keyAlpha = cursor.getInt(cursor.getColumnIndexOrThrow(KEY_ALPHA));
         config.corner = cursor.getInt(cursor.getColumnIndexOrThrow(CORNER_RADIUS));
+        config.buttonBottomMargin = cursor.getInt(cursor.getColumnIndexOrThrow(BUTTON_BOTTOM_MARGIN));
         sanitize(config);
         return config;
     }
@@ -92,6 +97,7 @@ public final class ConfigContract {
         config.alpha = clamp(config.alpha, 0, 255);
         config.keyAlpha = clamp(config.keyAlpha, 0, 255);
         config.corner = clamp(config.corner, 0, 48);
+        config.buttonBottomMargin = clamp(config.buttonBottomMargin, 0, 100);
         config.toolbar = config.corner;
     }
 
@@ -107,6 +113,7 @@ public final class ConfigContract {
         editor.putInt(BG_ALPHA, source.getInt(BG_ALPHA, DEFAULT_ALPHA));
         editor.putInt(KEY_ALPHA, source.getInt(KEY_ALPHA, DEFAULT_KEY_ALPHA));
         editor.putInt(CORNER_RADIUS, source.getInt(CORNER_RADIUS, DEFAULT_CORNER));
+        editor.putInt(BUTTON_BOTTOM_MARGIN, source.getInt(BUTTON_BOTTOM_MARGIN, DEFAULT_BUTTON_BOTTOM_MARGIN));
         editor.putBoolean(VOICE_ENABLED, source.getBoolean(VOICE_ENABLED, DEFAULT_VOICE));
         editor.putBoolean(SHOW_LEFT_BUTTON, source.getBoolean(SHOW_LEFT_BUTTON, DEFAULT_LEFT_BUTTON));
         editor.putBoolean(SHOW_RIGHT_BUTTON, source.getBoolean(SHOW_RIGHT_BUTTON, DEFAULT_RIGHT_BUTTON));

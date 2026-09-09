@@ -25,7 +25,8 @@ public class ConfigProvider extends ContentProvider {
             ConfigContract.BLUR_RADIUS,
             ConfigContract.BG_ALPHA,
             ConfigContract.KEY_ALPHA,
-            ConfigContract.CORNER_RADIUS
+            ConfigContract.CORNER_RADIUS,
+            ConfigContract.BUTTON_BOTTOM_MARGIN
     };
 
     @Override
@@ -87,6 +88,7 @@ public class ConfigProvider extends ContentProvider {
                 putInt(editor, values, ConfigContract.BG_ALPHA);
                 putInt(editor, values, ConfigContract.KEY_ALPHA);
                 putInt(editor, values, ConfigContract.CORNER_RADIUS);
+                putInt(editor, values, ConfigContract.BUTTON_BOTTOM_MARGIN);
 
                 long revision = ConfigContract.nextRevision(
                         sp.getLong(ConfigContract.REVISION, ConfigContract.DEFAULT_REVISION));
@@ -127,7 +129,8 @@ public class ConfigProvider extends ContentProvider {
                     sp.getInt(ConfigContract.BLUR_RADIUS, ConfigContract.DEFAULT_BLUR),
                     sp.getInt(ConfigContract.BG_ALPHA, ConfigContract.DEFAULT_ALPHA),
                     sp.getInt(ConfigContract.KEY_ALPHA, ConfigContract.DEFAULT_KEY_ALPHA),
-                    sp.getInt(ConfigContract.CORNER_RADIUS, ConfigContract.DEFAULT_CORNER)
+                    sp.getInt(ConfigContract.CORNER_RADIUS, ConfigContract.DEFAULT_CORNER),
+                    sp.getInt(ConfigContract.BUTTON_BOTTOM_MARGIN, ConfigContract.DEFAULT_BUTTON_BOTTOM_MARGIN)
             });
             return cursor;
         }

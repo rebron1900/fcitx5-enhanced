@@ -41,6 +41,10 @@ public class ConfigRequestReceiver extends BroadcastReceiver {
                 ConfigContract.KEY_ALPHA, ConfigContract.DEFAULT_KEY_ALPHA));
         config.putInt(ConfigContract.CORNER_RADIUS, preferences.getInt(
                 ConfigContract.CORNER_RADIUS, ConfigContract.DEFAULT_CORNER));
+        config.putInt(ConfigContract.BUTTON_BOTTOM_MARGIN, preferences.getInt(
+                ConfigContract.BUTTON_BOTTOM_MARGIN, ConfigContract.DEFAULT_BUTTON_BOTTOM_MARGIN));
+        config.putInt(ConfigContract.BUTTON_BOTTOM_MARGIN, preferences.getInt(
+                ConfigContract.BUTTON_BOTTOM_MARGIN, ConfigContract.DEFAULT_BUTTON_BOTTOM_MARGIN));
         config.putBoolean(ConfigContract.VOICE_ENABLED, preferences.getBoolean(
                 ConfigContract.VOICE_ENABLED, ConfigContract.DEFAULT_VOICE));
         config.putBoolean(ConfigContract.SHOW_LEFT_BUTTON, preferences.getBoolean(

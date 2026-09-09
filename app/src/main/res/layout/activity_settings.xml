@@ -231,6 +231,13 @@
                 android:paddingStart="16dp"
                 android:paddingEnd="16dp"
                 android:paddingBottom="10dp" />
+        <View android:layout_width="match_parent" android:layout_height="0.5dp" android:background="@color/ios_separator" android:layout_marginStart="16dp" />
+
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/settings_button_bottom_margin_label" android:textSize="16sp" android:textColor="@color/ios_label" android:paddingStart="16dp" android:paddingTop="12dp" android:paddingEnd="16dp" />
+        <TextView android:id="@+id/tv_button_bottom_margin_val" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/settings_button_bottom_margin_default" android:textSize="16sp" android:textColor="@color/ios_accent" android:gravity="end" android:paddingStart="16dp" android:paddingEnd="16dp" />
+        <SeekBar android:id="@+id/sb_button_bottom_margin" android:contentDescription="@string/settings_button_bottom_margin_accessibility" android:layout_width="match_parent" android:layout_height="wrap_content" android:max="100" android:progress="26" android:paddingStart="16dp" android:paddingEnd="16dp" />
+        <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/settings_button_bottom_margin_desc" android:textSize="13sp" android:textColor="@color/ios_secondary" android:paddingStart="16dp" android:paddingEnd="16dp" android:paddingBottom="10dp" />
+
         </LinearLayout>
 
         <!-- ═══ 分区：底部按钮 ═══ -->
